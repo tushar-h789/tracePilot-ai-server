@@ -1,0 +1,36 @@
+info:
+  name: Register member (to be added)
+  type: http
+  seq: 3
+
+http:
+  method: POST
+  url: "{{baseUrl}}/auth/register"
+  headers:
+    - name: X-CSRF-Token
+      value: "{{csrfToken}}"
+  body:
+    type: json
+    data: |-
+      {
+        "email": "bruno-member-{{runId}}@{{emailDomain}}",
+        "password": "{{demoPassword}}",
+        "display_name": "Bruno member"
+      }
+
+runtime:
+  scripts:
+    - type: tests
+      code: |-
+        test("generic response (no account enumeration) and no session cookie", function () {
+          expect(res.getBody().detail).to.include("If this email address was not already registered");
+          expect([].concat(res.getHeader("set-cookie") || []).join(";")).to.not.include("tp_session=");
+        });
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "202"
+
+settings:
+  encodeUrl: true
+  timeout: 10000

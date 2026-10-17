@@ -1,0 +1,34 @@
+info:
+  name: Outsider adds self to owner org (404)
+  type: http
+  seq: 5
+
+http:
+  method: POST
+  url: "{{baseUrl}}/organizations/{{orgId}}/members"
+  headers:
+    - name: X-CSRF-Token
+      value: "{{csrfToken}}"
+  body:
+    type: json
+    data: |-
+      {
+        "email": "bruno-outsider-{{runId}}@{{emailDomain}}",
+        "role": "owner"
+      }
+
+runtime:
+  scripts:
+    - type: tests
+      code: |-
+        test("cannot join another tenant", function () {
+          expect(res.getBody().detail).to.equal("Organization not found.");
+        });
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "404"
+
+settings:
+  encodeUrl: true
+  timeout: 5000

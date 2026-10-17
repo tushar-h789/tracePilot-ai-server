@@ -1,0 +1,30 @@
+info:
+  name: Create org without CSRF header (403)
+  type: http
+  seq: 2
+
+http:
+  method: POST
+  url: "{{baseUrl}}/organizations"
+  body:
+    type: json
+    data: |-
+      {
+        "name": "Should not exist"
+      }
+
+runtime:
+  scripts:
+    - type: tests
+      code: |-
+        test("rejected by the double-submit check", function () {
+          expect(res.getBody().code).to.equal("csrf_failed");
+        });
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "403"
+
+settings:
+  encodeUrl: true
+  timeout: 5000

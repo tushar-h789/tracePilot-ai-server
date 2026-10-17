@@ -1,0 +1,36 @@
+info:
+  name: Logout (revokes session)
+  type: http
+  seq: 8
+
+http:
+  method: POST
+  url: "{{baseUrl}}/auth/logout"
+  headers:
+    - name: X-CSRF-Token
+      value: "{{csrfToken}}"
+
+runtime:
+  scripts:
+    - type: after-response
+      code: |-
+        const sc = res.getHeader("set-cookie");
+        const list = Array.isArray(sc) ? sc : sc ? [sc] : [];
+        const csrf = list.find((v) => v.startsWith("tp_csrf="));
+        if (csrf) bru.setVar("csrfToken", csrf.split(";")[0].slice("tp_csrf=".length));
+    - type: tests
+      code: |-
+        test("clears the session cookie and issues an anonymous CSRF token", function () {
+          const cookies = [].concat(res.getHeader("set-cookie") || []);
+          const session = cookies.find((c) => c.startsWith("tp_session="));
+          expect(session, "session cookie deletion").to.be.a("string");
+          expect(session).to.match(/Max-Age=0|expires=Thu, 01 Jan 1970/i);
+        });
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "204"
+
+settings:
+  encodeUrl: true
+  timeout: 5000

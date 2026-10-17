@@ -1,0 +1,24 @@
+info:
+  name: List my organizations
+  type: http
+  seq: 1
+
+http:
+  method: GET
+  url: "{{baseUrl}}/organizations"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |-
+        test("returns an items array (only orgs I belong to)", function () {
+          expect(res.getBody().items).to.be.an("array");
+        });
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+
+settings:
+  encodeUrl: true
+  timeout: 5000

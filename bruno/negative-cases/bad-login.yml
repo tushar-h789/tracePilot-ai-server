@@ -1,0 +1,35 @@
+info:
+  name: Login with wrong password (401 generic)
+  type: http
+  seq: 1
+
+http:
+  method: POST
+  url: "{{baseUrl}}/auth/login"
+  headers:
+    - name: X-CSRF-Token
+      value: "{{csrfToken}}"
+  body:
+    type: json
+    data: |-
+      {
+        "email": "bruno-nobody-{{runId}}@{{emailDomain}}",
+        "password": "definitely-not-the-password"
+      }
+
+runtime:
+  scripts:
+    - type: tests
+      code: |-
+        test("generic message, no enumeration hints", function () {
+          expect(res.getBody().detail).to.equal("Invalid email or password.");
+          expect(res.getBody().code).to.equal("invalid_credentials");
+        });
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "401"
+
+settings:
+  encodeUrl: true
+  timeout: 5000

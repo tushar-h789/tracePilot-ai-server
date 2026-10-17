@@ -1,0 +1,27 @@
+info:
+  name: Current user
+  type: http
+  seq: 6
+  tags:
+    - smoke
+
+http:
+  method: GET
+  url: "{{baseUrl}}/auth/me"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |-
+        test("identifies the owner from the session cookie", function () {
+          expect(res.getBody().user.id).to.equal(bru.getVar("ownerUserId"));
+          expect(res.getHeader("cache-control")).to.equal("no-store");
+        });
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+
+settings:
+  encodeUrl: true
+  timeout: 5000

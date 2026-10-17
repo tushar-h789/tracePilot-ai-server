@@ -1,0 +1,8 @@
+info:
+  name: organizations
+  type: folder
+  seq: 3
+
+docs: |-
+  Organizations of the logged-in user (run `auth` first). Creating an org makes the caller its `owner`.
+  Scope is always resolved from the caller's membership on the server; non-members get 404.

@@ -1,0 +1,33 @@
+info:
+  name: Logout outsider
+  type: http
+  seq: 6
+
+http:
+  method: POST
+  url: "{{baseUrl}}/auth/logout"
+  headers:
+    - name: X-CSRF-Token
+      value: "{{csrfToken}}"
+
+runtime:
+  scripts:
+    - type: after-response
+      code: |-
+        const sc = res.getHeader("set-cookie");
+        const list = Array.isArray(sc) ? sc : sc ? [sc] : [];
+        const csrf = list.find((v) => v.startsWith("tp_csrf="));
+        if (csrf) bru.setVar("csrfToken", csrf.split(";")[0].slice("tp_csrf=".length));
+    - type: tests
+      code: |-
+        test("logged out", function () {
+          expect(res.status).to.equal(204);
+        });
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "204"
+
+settings:
+  encodeUrl: true
+  timeout: 5000
