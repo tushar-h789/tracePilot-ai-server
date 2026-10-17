@@ -160,7 +160,7 @@ keyset pagination `{items, next_cursor}`; time ranges required and capped (logs 
 with minimum bucket proportional to range); OpenAPI published at `/api/v1/openapi.json` (disabled or protected in
 prod mode).
 
-### Ingestion request (proposed defaults, configurable)
+### Ingestion request (proposed defaults; implemented in Phase 3 with event-id idempotency instead of `Idempotency-Key`, see §9e and ADR-021)
 - Body ≤ **1 MiB** (rejected before parsing → 413); ≤ **500 events** per batch; `message` ≤ 8 KiB;
   `attributes` ≤ 16 KiB serialized, depth ≤ 5; `service` ≤ 100 chars; timestamps within [now − 7 d, now + 5 min].
 - Rate limits per key (e.g. 120 req/min) and per project (e.g. 50k events/min) via Redis; 429 with `Retry-After`.
@@ -367,6 +367,65 @@ reason. Repositories take the scope object, never a raw id from the request body
 | `GET /organizations/{org_id}/audit-logs?limit=` | 200 | owner/admin; newest first |
 
 All unsafe methods require the CSRF header; errors are `application/problem+json`.
+
+### 9e. Phase 3 implemented schema and API (migration `0003_projects_ingestion`, 2026-10-17)
+
+**Tables**
+- **`projects`**:
+  - columns: `id` uuidv7, `org_id` → organizations (CASCADE), `name`, `slug` (`^[a-z0-9][a-z0-9-]{1,46}[a-z0-9]$`),
+    `environment` (default `production`), `retention_days` (1–30, default 7), `archived_at`, timestamps;
+  - `UNIQUE (org_id, slug)`.
+- **`ingestion_keys`**:
+  - columns: `id`, `project_id` → projects (CASCADE), `name`, `prefix` (unique `tp_<12 hex>`), `key_hash` (64 hex,
+    HMAC), `created_by` → users (SET NULL), `created_at`, `last_used_at`, `expires_at`, `revoked_at`,
+    `replaced_by_id` → ingestion_keys;
+  - partial index `ix_ingestion_keys_project_id_active` (WHERE revoked_at IS NULL).
+- **`log_events`**:
+  - columns: `id` bigint identity, `project_id` (CASCADE), `ingestion_key_id` (SET NULL), `event_id` uuid, `ts`,
+    `received_at`, `level` (debug|info|warning|error|critical), `service`, `environment`, `message` (≤ 8192),
+    `trace_id`, `request_id`, `duration_ms`, `http_method`, `http_path`, `http_status` (100–599), `attributes`
+    jsonb, `is_synthetic`, generated `message_tsv`;
+  - `UNIQUE (project_id, event_id)`;
+  - indexes: (project_id, ts DESC), (project_id, level, ts DESC), (project_id, service, ts DESC), partial
+    (project_id, trace_id), GIN (message_tsv).
+
+**Endpoints** (`/api/v1`; session + CSRF unless noted)
+
+| Method | Path | Permission |
+| --- | --- | --- |
+| GET / POST | `/organizations/{org_id}/projects` (`include_archived`, `cursor`, `limit`) | read: any member / create: owner, admin |
+| GET / PATCH | `/projects/{project_id}` | read: any member / update: owner, admin (409 when archived) |
+| POST | `/projects/{project_id}/archive`, `/restore` | owner, admin |
+| GET | `/projects/{project_id}/ingestion-keys` (`include_revoked`, `cursor`, `limit`) | owner, admin, member |
+| POST | `/projects/{project_id}/ingestion-keys` → 201 `{key, secret}` | owner, admin |
+| POST | `/projects/{project_id}/ingestion-keys/{key_id}/revoke` → 200 | owner, admin |
+| POST | `/projects/{project_id}/ingestion-keys/{key_id}/rotate` `{grace_seconds}` → 201 `{key, secret, previous_key}` | owner, admin |
+| POST | `/ingest/logs` → 202 `{received, accepted, duplicates, rejected}` | **ingestion key only** (`Authorization: Bearer`) |
+
+Access pattern: `authorize_project(project_id)` loads the project, then reuses `authorize_org` (DB membership,
+404 for non-members with "Project not found.", 403 for insufficient role). Key routes also check that
+`key.project_id` matches the path.
+
+**Ingest data flow**
+
+```
+service → tracepilot_sdk (chunk ≤500 events / <1 MiB, retries) → POST /api/v1/ingest/logs
+  → Content-Type / Content-Length / streamed 1 MiB cap (415/413)
+  → Bearer key → prefix lookup → HMAC compare → status + project not archived (401)
+  → Redis per-key request limit (429 / 503)
+  → strict pydantic batch (422) → batch size (422) → timestamp window (422)
+  → Redis per-project events limit (429)
+  → redact attributes, scrub messages, is_synthetic flag
+  → INSERT … ON CONFLICT (project_id, event_id) DO NOTHING RETURNING id
+  → throttled last_used_at touch → commit → 202 counts
+```
+
+**SDK and demo** (separate uv projects, ADR-023)
+- `packages/python-sdk`: `TracePilotClient(endpoint, api_key)` (or `TRACEPILOT_ENDPOINT` /
+  `TRACEPILOT_INGEST_KEY`), `LogEvent`, `IngestResult`, errors `TracePilotError` → `ConfigurationError`,
+  `TransportError`, `ApiError` → `AuthenticationError`, `ValidationError`, `RateLimitError`, `ServerError`.
+- `demo/sample-service`: `tracepilot-demo --scenario … --seed … --start … --duration … --count …
+  [--dry-run] [--endpoint …]` generates deterministic synthetic traffic through the SDK.
 
 ### Metrics computation
 Computed on read from `log_events` with bounded windows: `date_bin(bucket, ts, origin)` grouping;

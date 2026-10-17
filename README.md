@@ -40,6 +40,8 @@ cp .env.example .env
 #   PW=$(python3 -c 'import secrets;print(secrets.token_urlsafe(24))'); sed -i "s/change-me-local-only/$PW/g" .env
 # Also set SECRET_KEY (signs CSRF tokens; at least 32 characters):
 #   SK=$(python3 -c 'import secrets;print(secrets.token_urlsafe(48))'); sed -i "s/^SECRET_KEY=.*/SECRET_KEY=$SK/" .env
+# And INGEST_KEY_PEPPER (HMAC pepper for ingestion keys; at least 32 characters; changing it invalidates all keys):
+#   IP=$(python3 -c 'import secrets;print(secrets.token_urlsafe(48))'); sed -i "s/^INGEST_KEY_PEPPER=.*/INGEST_KEY_PEPPER=$IP/" .env
 
 docker compose up -d --build          # postgres, redis, api, worker, beat (waits for healthy deps)
 docker compose run --rm migrate       # apply migrations (explicit, one-shot)
@@ -88,7 +90,8 @@ uv run celery -A app.workers.celery_app worker --loglevel=INFO --concurrency=1
 ```bash
 docker compose up -d postgres redis
 ./scripts/ci-local.sh          # ruff, ruff format, mypy, bandit, pytest+coverage (unit+integration),
-                               # alembic up/down/check, OpenAPI drift, pip-audit, docker build
+                               # alembic up/down/check, OpenAPI drift, pip-audit, SDK + demo
+                               # (ruff, format, mypy, pytest), gitleaks, docker build
 SKIP_DOCKER=1 ./scripts/ci-local.sh
 ```
 OpenAPI contract for the client: `uv run python -m scripts.export_openapi` writes `openapi/openapi.json`
@@ -115,14 +118,62 @@ curl -s -c $J -b $J -H "X-CSRF-Token: $T" -H 'content-type: application/json' \
 curl -s -b $J $B/auth/me
 ```
 
+## Projects, ingestion keys and log ingestion (Phase 3)
+
+- **Projects**: `/api/v1/organizations/{org_id}/projects` lists and creates. `/api/v1/projects/{id}` reads and
+  updates, with `/archive` and `/restore`.
+  - Owner/admin manage projects; every member can read them.
+  - Slugs are unique per org.
+  - Archived projects are hidden unless `include_archived=true`, are read-only and reject ingestion.
+- **Ingestion keys**: `/api/v1/projects/{id}/ingestion-keys` supports create, list, `/{key_id}/revoke` and
+  `/{key_id}/rotate`.
+  - The key looks like `tp_<12 hex>_<43 chars>`. It is returned **once**, and only its HMAC is stored.
+  - Owner/admin manage keys; members can see key metadata.
+- **Ingest**: `POST /api/v1/ingest/logs` with `Authorization: Bearer <key>` and `{"events": [...]}` (≤ 500 events,
+  ≤ 1 MiB).
+  - The response is 202 `{received, accepted, duplicates, rejected}`.
+  - Events are idempotent per project by `event_id`.
+  - Invalid batches are rejected as a whole (422).
+- **List endpoints** return `{items, next_cursor}` (keyset pagination; pass `cursor`, `limit` ≤ 100).
+- Design: [ADR-021/022/023](docs/DECISIONS.md), [ARCHITECTURE §9e](docs/ARCHITECTURE.md),
+  [SECURITY §11](docs/SECURITY.md).
+
+```bash
+# after creating a project and a key in the web app (or with the API, see scripts/e2e-demo.sh):
+export TRACEPILOT_INGEST_KEY='tp_…'      # never commit it
+curl -s -H "Authorization: Bearer $TRACEPILOT_INGEST_KEY" -H 'content-type: application/json' \
+  -d '{"events":[{"event_id":"'"$(python3 -c 'import uuid;print(uuid.uuid4())')"'","timestamp":"'"$(date -u +%FT%TZ)"'","level":"error","service_name":"checkout-api","message":"boom"}]}' \
+  http://127.0.0.1:8000/api/v1/ingest/logs
+```
+
+### Python SDK
+[`packages/python-sdk`](packages/python-sdk/README.md) (`tracepilot_sdk`) is a typed client. It handles timeouts,
+bounded retries with jitter (connect errors, timeouts, 429 with `Retry-After`, 5xx), automatic chunking and typed
+errors. It is a separate uv project: `cd packages/python-sdk && uv sync && uv run pytest`.
+
+### Demo sample service (synthetic data)
+[`demo/sample-service`](demo/sample-service/README.md) generates deterministic synthetic traffic through the SDK.
+The scenarios are `normal`, `latency`, `http-500`, `db-timeout`, `external-api-failure` and `recovery`.
+
+```bash
+cd demo/sample-service && uv sync
+uv run tracepilot-demo --scenario http-500 --seed 7 --count 5 --dry-run          # preview, no key needed
+TRACEPILOT_INGEST_KEY='tp_…' uv run tracepilot-demo --scenario db-timeout --seed 42 \
+  --start 2026-10-17T06:00:00Z --duration 600 --count 500 --endpoint http://127.0.0.1:8000
+```
+
+Events carry `environment="demo"` and `attributes.synthetic=true`. Rerunning the same scenario and seed stores
+nothing new (`duplicates` = count).
+
+End-to-end acceptance against the running stack: `./scripts/e2e-demo.sh`. It creates its own user, org, project
+and key, sends every scenario twice, checks the PostgreSQL row counts and checks revocation.
+
 ## API collection (Bruno)
 `bruno/` is a Bruno collection (OpenCollection YAML). Open it in the Bruno app (Open Collection → `bruno/`) or run
-`cd bruno && bunx @usebruno/cli run --env Local` (folders: health, auth, organizations, organization-members,
-negative-cases). Conventions: [bruno/README.md](bruno/README.md).
-
-## Demo sample service
-`uv run python demo/sample-service/sample_service.py --dry-run --count 5` prints synthetic log events
-(sending arrives with ingestion keys in Phase 3). See [demo/sample-service/README.md](demo/sample-service/README.md).
+`cd bruno && bunx @usebruno/cli run --env Local`.
+- Folders: health, auth, organizations, organization-members, projects, ingestion-keys, ingest, negative-cases.
+- One-time keys are kept only in runtime variables.
+- Conventions: [bruno/README.md](bruno/README.md).
 
 ## Configuration
 All settings are environment variables validated at startup (`app/core/config.py`); invalid values stop the
@@ -133,6 +184,14 @@ Key variables: `APP_ENV`, `LOG_LEVEL`, `DATABASE_URL` (`postgresql+psycopg://…
 (≥ 32 chars), `COOKIE_SECURE` (required `true` in prod; switches to `__Host-` cookie names),
 `SESSION_IDLE_TIMEOUT_MINUTES` / `SESSION_ABSOLUTE_TIMEOUT_HOURS`, `ARGON2_*`, `LOGIN_RATE_LIMIT_*`,
 `REGISTER_RATE_LIMIT_*`, `TRUSTED_PROXIES` (CIDRs allowed to set `X-Forwarded-For`; empty by default).
+Since Phase 3:
+- `INGEST_KEY_PEPPER` (required, ≥ 32 chars; production refuses the placeholder).
+- `MAX_ACTIVE_KEYS_PER_PROJECT` (10) and `KEY_ROTATION_MAX_GRACE_SECONDS` (86400).
+- `INGEST_MAX_BODY_BYTES` (1048576) and `INGEST_MAX_BATCH_EVENTS` (500).
+- `INGEST_MAX_PAST_SECONDS` (604800) and `INGEST_MAX_FUTURE_SECONDS` (300).
+- `INGEST_RATE_LIMIT_REQUESTS_PER_KEY` (120), `INGEST_RATE_LIMIT_EVENTS_PER_PROJECT` (50000) and
+  `INGEST_RATE_LIMIT_WINDOW_SECONDS` (60).
+- `INGEST_KEY_TOUCH_INTERVAL_SECONDS` (60).
 See `.env.example`.
 
 ## Troubleshooting

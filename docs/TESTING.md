@@ -208,3 +208,57 @@ Folders `auth`, `organizations`, `organization-members`, `negative-cases`; each 
 (`runId`), so it can be re-run against the same database. Run with
 `cd bruno && bunx @usebruno/cli run --env Local`.
 
+
+## 12. Phase 3 implementation status (2026-10-17)
+
+### Server: 298 tests (134 unit + 164 integration, real PostgreSQL 18 + Redis 8), coverage 97.41 % (gate 80 %)
+New files, 117 tests:
+- `test_projects_api.py`: CRUD, role matrix, cross-org 404, slug per org, archive/restore, keyset pagination,
+  audit, auth/CSRF.
+- `test_ingestion_keys_api.py`: secret shown once and only the hash stored, permission matrix, revoke, rotate with
+  and without grace, active-key cap, foreign key ids 404, audit without secrets, sessions and keys kept separate.
+- `test_ingest_api.py`: rows written, UTC normalization, duplicates within and across batches, per-project scope,
+  foreign `project_id`, generic 401s, cookie-only 401, archived project, 413 (header and streamed), 422 (too many,
+  invalid, no echo), malformed, gzip 415, redaction, 429 per key and per project, Redis down 503, `last_used_at`
+  throttle, CSRF/CORS, no key material in logs.
+- `test_ingest_unit.py`: key entropy and format, HMAC, bearer parsing, cursors, event contract, scrubbing,
+  permission matrix.
+
+The migration test also covers `0003` upgrade → downgrade → upgrade, and CI runs `alembic check`.
+
+### SDK (`packages/python-sdk`): 23 tests, coverage 95.87 % (gate 90 %)
+Mocked HTTP via `httpx.MockTransport`. Covers:
+- the request contract;
+- retries (503, connect error, timeout) and no retry on 4xx;
+- 429 + `Retry-After`, including give-up and an excessive value;
+- persistent 5xx, backoff cap;
+- chunking by count and by bytes;
+- local validation;
+- env configuration, redacted `repr`, and the key never appearing in errors or logs.
+
+### Demo (`demo/sample-service`): 30 tests, coverage 97.70 % (gate 85 %)
+- The same seed gives byte-identical output for all six scenarios.
+- Different seeds give disjoint ids.
+- uuid5 ids do not depend on `--start`.
+- Demo tagging and window bounds hold.
+- Scenario shapes hold: error rates, latency medians and p95, error types and statuses, recovery trend.
+- CLI: dry-run, missing key → exit 2, bad arguments.
+- Sending through the SDK against a mocked API, including an idempotent rerun and keeping the key out of output.
+
+Both the SDK and the demo run on Python 3.11 and 3.13 in CI (`sdk-demo` matrix).
+
+### End-to-end acceptance: `scripts/e2e-demo.sh` (compose stack)
+1. Creates a run-unique user, org, project and key through the API.
+2. Sends all six scenarios (seed 42, 200 events each, fixed `--start`).
+3. Counts rows with `docker compose exec postgres psql`.
+4. Reruns with the same seed and checks the counts are unchanged.
+5. Revokes the key and checks a further run fails (401) and stores nothing.
+
+Result on 2026-10-17: **1200 rows after pass 1, 1200 after the rerun** (each run reported `duplicates: 200` per
+scenario); the revoked key was rejected.
+
+### Bruno: 65 requests, 70 tests, 69 assertions, all passing (rerunnable)
+New folders: `projects/` (12), `ingestion-keys/` (8), `ingest/` (12), plus 5 cross-project negatives.
+
+### Client
+Vitest: 84 tests. Playwright: 6 E2E tests, including `projects.spec.ts`. See the client repo `docs/PROGRESS.md`.

@@ -196,3 +196,95 @@ during any step: 20.8 GB (web image build, within the cap).
 `projects` table + `authorize_project` on top of `authorize_org`, project CRUD, hashed ingestion keys, Bruno
 `projects/` and `ingestion-keys/` folders, client project pages.
 
+
+## Phase 3: projects, ingestion and synthetic data (2026-10-17)
+
+Committed directly to `main` (the user's instruction for this phase). Each push was preceded by a green
+`scripts/ci-local.sh`.
+
+### Delivered
+- **Projects**: org-scoped CRUD with archive/restore, slug unique per org, keyset pagination, audit events.
+  Cross-org access returns 404.
+- **Ingestion keys** (ADR-021):
+  - `tp_<id>_<256-bit>` keys, stored as HMAC-SHA256 with a pepper, plaintext returned once with `no-store`;
+  - revoke, rotate with optional grace, cap of 10 active keys, admin+ to manage, audit events.
+- **`POST /api/v1/ingest/logs`**:
+  - authentication by bearer key only;
+  - body cap before parsing; strict all-or-nothing contract; batch, timestamp and rate limits (per key and per
+    project);
+  - `ON CONFLICT DO NOTHING` idempotency per project;
+  - redaction at ingest; fail closed without Redis.
+- **Migration** `0003_projects_ingestion` (upgrade and downgrade tested). Pagination envelope (ADR-022). OpenAPI
+  re-exported, with an `IngestionKey` security scheme.
+- **`packages/python-sdk`** (`tracepilot_sdk`) and **`demo/sample-service`** (six deterministic scenarios, CLI)
+  as separate uv projects (ADR-023), with CI on Python 3.11 and 3.13.
+- **Bruno**: `projects/`, `ingestion-keys/`, `ingest/` and cross-project negatives.
+- **`scripts/e2e-demo.sh`**: end-to-end acceptance against the compose stack.
+- **Docs**: ADR-021/022/023, SECURITY §11, ARCHITECTURE §9e, TESTING §12, this section, READMEs.
+- **Client** (separate repo): project pages, key management UI, Vitest and Playwright.
+
+### Results (executed locally, 2026-10-17)
+
+| Check | Result |
+| --- | --- |
+| ruff / ruff format / mypy (96 files) / bandit | clean |
+| pytest (real Postgres 18 + Redis 8) | 298 passed (134 unit + 164 integration), coverage 97.41 %; one third-party deprecation warning (starlette testclient) |
+| alembic upgrade → downgrade base → upgrade → check | passed |
+| OpenAPI drift / pip-audit | up to date / no known vulnerabilities |
+| SDK: ruff, mypy, pytest | 23 passed, 95.87 % (also 23 passed on Python 3.11) |
+| Demo: ruff, mypy, pytest | 30 passed, 97.70 % (also 30 passed on Python 3.11) |
+| gitleaks (full history) | no leaks, after fixing 3 false positives on fake key fixtures (see below) |
+| docker build | image built |
+| `scripts/e2e-demo.sh` (seed 42, 6 × 200 events) | pass 1: 1200 rows; same-seed rerun: 1200 rows (every scenario `accepted 0, duplicates 200`); revoked key → 401, rows unchanged |
+| API logs during the e2e run | 0 full keys (regex grep); `ingest_auth_failed` logged with `key_prefix` only |
+| Bruno CLI (`--env Local`) | 65/65 requests, 70/70 tests, 69/69 assertions; second run also green |
+
+Rows per scenario after both passes (seed 42, `rows | errors`):
+
+| Scenario | Rows | Errors |
+| --- | --- | --- |
+| db-timeout | 200 | 46 |
+| external-api-failure | 200 | 45 |
+| http-500 | 200 | 61 |
+| latency | 200 | 0 |
+| normal | 200 | 6 |
+| recovery | 200 | 23 |
+
+Every row has `is_synthetic=true` and `environment='demo'`.
+
+### CI incident
+The first push (`2dcbb08`) failed the gitleaks job. The `generic-api-key` rule matched three obviously fake
+fixtures (`key = "tp_0123456789ab_" + "K" * 43`). The fix commit (`156e3b7`):
+- builds the fixtures from pieces so the rule no longer matches;
+- adds `.gitleaksignore` entries for the three historical fingerprints (history is not rewritten);
+- adds the same gitleaks scan to `scripts/ci-local.sh`.
+
+That run was fully green.
+
+### Memory
+The machine sat at about 20.6–21.4 GB used (of 27.4 GB; the 80 % cap is ≈ 21.9 GB) because of other workloads.
+Every heavy step ran alone inside `systemd-run --user --scope -p MemoryMax=… -p MemorySwapMax=0`, after checking
+`free -m`. Highest system-wide "used" observed:
+
+| Step | Peak used |
+| --- | --- |
+| api image build | 21.0 GB |
+| client build | 21.6 GB |
+| Playwright E2E | 21.7 GB; one earlier attempt touched 21.9 GB, at the cap |
+| pytest (scope) | < 0.25 GB |
+
+The web container image was **not** rebuilt (the Docker build cannot be memory-capped and would exceed the cap).
+The client E2E ran against a local production build on port 3100 while the web container was briefly stopped,
+then restarted.
+
+### Known limitations
+- No logs explorer or query API yet (Phase 4). Rows can be inspected with `psql`.
+- No pepper versioning: changing `INGEST_KEY_PEPPER` invalidates every key.
+- Fixed-window rate limits. Idempotency is bounded by retention (the retention job is not implemented yet).
+- The demo's default `--start` is "now", so reruns are identical only when `--start` is passed explicitly. Event
+  ids are identical regardless, so reruns never duplicate.
+- Rotation with a grace period is API-only; the UI rotates with grace 0.
+
+### Next (Phase 4)
+Log search/explorer API and UI on top of `log_events` (indexes for level/service/time/trace and full-text are
+already in place), plus the retention job.

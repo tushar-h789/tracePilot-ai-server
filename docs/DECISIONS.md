@@ -257,3 +257,98 @@ Date for all Phase 0 ADRs: 2026-10-17.
 - **Low-RAM builds**: `next.config.ts` honours `NEXT_BUILD_CPUS` (worker count) and `NEXT_SKIP_TYPECHECK=1`
   (typecheck runs separately via `bun run typecheck`). The default 15 workers peaked above 1.3 GB; one worker
   peaks at ≈ 0.56 GB. The client Dockerfile sets both.
+
+## ADR-021 — Ingestion keys, ingest authentication, idempotency and validation (refines ADR-011)
+- **Status**: Accepted (Phase 3, 2026-10-17).
+- **Key format**: `tp_<12 hex public id>_<secrets.token_urlsafe(32)>` (43 chars, 256 bits of entropy).
+  - Regex: `^tp_([0-9a-f]{12})_([A-Za-z0-9_-]{43})$`.
+  - `tp_<id>` is the stored, unique, non-secret **prefix**. It is used for lookup, in the UI and in logs.
+  - The recognizable shape lets secret scanners and our own log scrubber (`INGEST_KEY_VALUE_RE`) find leaked keys.
+- **Hashing**: `key_hash = HMAC-SHA256(INGEST_KEY_PEPPER, full key)` (64 hex). Verification is lookup by prefix,
+  then `hmac.compare_digest`.
+  - A fast keyed hash is enough because the secret is 256-bit random; a slow password hash adds nothing here and
+    would make ingest a CPU DoS target.
+  - The pepper (≥ 32 chars) lives only in the environment; a database dump alone cannot verify keys.
+  - Production refuses a placeholder pepper.
+  - *Trade-off*: rotating the pepper invalidates every key. There is no pepper versioning in the MVP.
+- **Plaintext once**: only `POST …/ingestion-keys` and `POST …/{id}/rotate` return `secret`, with
+  `Cache-Control: no-store` and `Pragma: no-cache`. Lists return metadata: prefix, name, status, created_at,
+  last_used_at, expires_at, revoked_at, replaced_by_id.
+- **Rotation**: rotation creates a new key with the same name. The old key gets `replaced_by_id`, and then:
+  - `grace_seconds=0` (the default): the old key is revoked immediately;
+  - otherwise the old key gets `expires_at = now + grace` (≤ `KEY_ROTATION_MAX_GRACE_SECONDS`, 86 400);
+  - only active keys can be rotated (409).
+- **Limits**: at most `MAX_ACTIVE_KEYS_PER_PROJECT` (10) active keys; the project row is locked during creation.
+  - Archived projects cannot get keys.
+  - Owner/admin manage keys. Members can read key metadata (they operate services and need to see `last_used_at`).
+    Viewers cannot.
+  - Every create, revoke and rotate writes an audit event with the prefix, never the secret.
+- **Ingest auth**: only `Authorization: Bearer <key>`.
+  - Cookies are never read, so there is no CSRF exposure and no CSRF check.
+  - CORS does not allow the `Authorization` header, so browsers cannot call ingest cross-origin. The web proxy
+    does not forward it either.
+  - Every failure returns the same 401: `invalid_ingestion_key`, "A valid ingestion key is required.",
+    `WWW-Authenticate: Bearer`. Failures covered: missing, malformed, unknown, wrong secret, revoked, expired,
+    archived project.
+  - The reason is logged server-side with the prefix only.
+  - `last_used_at` is updated at most once per `INGEST_KEY_TOUCH_INTERVAL_SECONDS` (60 s), with a conditional
+    UPDATE, to avoid a write per request.
+- **Project binding**: the project comes from the key. `project_id` anywhere in the payload is a 422
+  (`extra="forbid"`), so a key can never write into another project.
+- **Idempotency (replaces the `Idempotency-Key` / `ingest_batches` sketch in ARCHITECTURE §6)**:
+  - The client supplies an `event_id` (UUID) per event; the SDK and demo do so deterministically.
+  - `log_events` has `UNIQUE (project_id, event_id)`; inserts use `ON CONFLICT DO NOTHING RETURNING id`.
+  - The response reports `received`, `accepted`, `duplicates`, `rejected` (always 0, see below).
+  - **Scope**: per project, for as long as the original row exists, so retention bounds the window. The same
+    `event_id` in two projects gives two rows.
+  - Duplicates within one batch are also collapsed.
+  - *Why*: per-event ids make partial retries, SDK chunking and demo reruns safe without storing request hashes.
+    Batch replay detection would not handle re-chunked retries.
+- **Validation (all-or-nothing)**:
+  - Content-Type must be `application/json`; gzip is refused (415).
+  - `Content-Length` over `INGEST_MAX_BODY_BYTES` (1 MiB) → 413 before reading. A streamed body is counted and
+    cut off at the same limit.
+  - The per-key request rate limit runs before parsing.
+  - Strict pydantic contract (`extra="forbid"`, bounded strings, enums, finite numbers, attribute depth/keys/size,
+    no NUL).
+  - Batch over `INGEST_MAX_BATCH_EVENTS` (500) → 422.
+  - Timestamps outside [now − 7 d, now + 5 min] → 422.
+  - The per-project events limit then uses `INCRBY` by batch size.
+  - Any invalid event rejects the whole batch with a 422 listing up to 50 errors by `loc` and `type`, without
+    echoing input.
+  - *Why*: partial acceptance makes retries ambiguous. Clients fix and resend; idempotency makes resending safe.
+- **Redaction at ingest**: attributes go through the sensitive-key denylist (`password`, `token`, `ingest_key`, …)
+  and every string goes through `scrub_secrets` before storage. `attributes.synthetic is true` sets
+  `log_events.is_synthetic`.
+- **Fail closed**: if Redis is unavailable, ingest answers 503 instead of skipping rate limits.
+
+## ADR-022 — Cursor pagination envelope
+- **Status**: Accepted (Phase 3, 2026-10-17).
+- **Decision**: new list endpoints (`/organizations/{id}/projects`, `/projects/{id}/ingestion-keys`, later logs)
+  return `{items, next_cursor}`.
+  - Keyset pagination, newest first, by UUIDv7 `id` (time-ordered, unique, so the order is total without a
+    tiebreaker).
+  - The cursor is opaque base64url JSON `{"v":1,"id":"…"}`. A forged or invalid cursor → 422.
+  - `limit` is 1–100 (default 50). `next_cursor` is `null` on the last page.
+- **Consequences**: stable pages under concurrent inserts and O(log n) seeks. There is no total count and no jumping
+  to page N, which the UI does not need. Phase 2 lists (`organizations`, `members`) keep `{items}` (small and
+  bounded). Errors keep the RFC 9457 problem format from Phase 1.
+
+## ADR-023 — Python SDK and demo as separate uv projects
+- **Status**: Accepted (Phase 3, 2026-10-17).
+- **Decision**:
+  - `packages/python-sdk` (`tracepilot_sdk`, hatchling, src layout, Python ≥ 3.11) and `demo/sample-service`
+    are their own uv projects with their own lockfiles. The demo depends on the SDK through a `path` source.
+  - The server's lockfile and Docker image do not include them.
+  - Server ruff/mypy exclude them; CI runs ruff, format, mypy and pytest for both on Python 3.11 and 3.13.
+  - `scripts/ci-local.sh` runs the same steps.
+- **SDK retry policy**: retry only connect errors, timeouts, 429 (honouring `Retry-After`, capped) and 5xx.
+  - At most `max_retries` (3) retries, with exponential backoff and full jitter.
+  - 400/401/403/413/422 never retry.
+  - Batches are split by count (≤ 500) and by serialized size (below 1 MiB).
+  - Because event ids are idempotent, retrying after an ambiguous timeout cannot duplicate rows.
+- **Demo determinism**:
+  - Event ids are `uuid5(NAMESPACE, "{scenario}:{seed}:{index}")`.
+  - All other fields come from `random.Random("tracepilot-demo:{scenario}:{seed}")`, plus evenly spaced timestamps
+    from `--start`.
+  - Every event is tagged `environment="demo"` and `attributes.synthetic=true`.

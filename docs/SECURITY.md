@@ -212,3 +212,43 @@ the client (`braces`, GHSA-vfj7-8cjw-p6xm, no patched version exists) is ignored
 - The frontend's `src/proxy.ts` check is UX only (cookie presence); every authorization decision is made by the API.
 - `localStorage` holds one non-secret value: the last selected organization id (`tp:last-org-id`, FR-07).
 
+
+## 11. Phase 3: projects, ingestion keys and ingest controls (implemented and tested, 2026-10-17)
+
+Design: ADR-021/022/023. Tests named below live in `tests/test_ingest_api.py`, `tests/test_ingestion_keys_api.py`,
+`tests/test_projects_api.py`, `tests/test_ingest_unit.py`, the SDK/demo suites and `bruno/`.
+
+### Threats and controls
+
+| Threat | Control | Tested by |
+| --- | --- | --- |
+| Key theft from a DB dump | Only HMAC-SHA256 with an env pepper is stored; prefix lookup + `compare_digest` | `test_secret_is_shown_once_and_only_hash_is_stored`, `test_hash_is_peppered_hmac_and_verification_is_exact` |
+| Key exposure through APIs or caches | Plaintext only in create/rotate responses with `no-store`; lists hold metadata only | same + Bruno `ingestion-keys/list` |
+| Key leaked into logs or audit | `scrub_secrets` on log messages, string extras and exception text; audit stores the prefix only; demo/SDK errors exclude the key; SDK `repr` redacts | `test_logs_contain_no_key_material`, `test_formatter_scrubs_keys_from_messages`, `test_key_lifecycle_is_audited_without_secrets`, SDK repr tests, `scripts/e2e-demo.sh` log grep |
+| Using a revoked, expired or rotated-away key | Status checked on every request; generic 401 | `test_revoked_key_is_rejected`, rotate tests, Bruno `ingest/revoked-401`, `rotated-old-key-401`, Playwright |
+| Key-state oracle | One body and code for every auth failure | `test_bad_keys_get_generic_401` |
+| Cross-tenant writes | Project comes from the key; payload `project_id` → 422; event ids scoped per project | `test_payload_project_id_cannot_target_another_tenant`, `test_event_ids_are_scoped_per_project`, Bruno `foreign-project-id-422` |
+| Cross-tenant reads or management | `authorize_project` → `authorize_org` (DB membership); unknown and foreign both 404; key ids checked against the path project | `test_cross_org_project_access_is_404`, `test_key_ids_from_another_project_are_404`, Bruno `negative-cases/cross-project-*`, `revoke-wrong-project` |
+| CSRF / ambient authority on ingest | Ingest ignores cookies; CORS does not allow `Authorization`; proxy does not forward it | `test_cookie_only_request_is_rejected`, `test_ingest_ignores_csrf_and_cors_does_not_allow_authorization`, Bruno `cookie-only-401` |
+| Keys used as user credentials, or sessions used as keys | Separate dependencies; a key never authorizes `/projects/*`; a session never authorizes ingest | `test_session_cookie_never_authorizes_keys_and_keys_never_authorize_user_api` |
+| Memory or CPU DoS via large bodies | 413 from `Content-Length` before reading; streamed cap; gzip refused; batch ≤ 500; strict limits on every field | `test_oversized_body_is_413_before_parsing`, `test_streamed_body_without_content_length_is_capped`, `test_compressed_bodies_are_refused`, `test_too_many_events_is_422` |
+| Flooding | Redis per-key request limit and per-project events limit → 429 + `Retry-After`; fail closed (503) without Redis | `test_per_key_rate_limit_returns_429_with_retry_after`, `test_per_project_event_rate_limit`, `test_redis_down_fails_closed` |
+| Reflected payloads or log injection | Validation errors carry `loc`/`type`/`msg` only (no `input`); NUL bytes rejected; messages capped | `test_validation_errors_do_not_echo_payload`, `test_malformed_requests` |
+| Secrets inside customer logs | Denylisted attribute keys → `[REDACTED]`; ingestion keys in strings scrubbed before storage | `test_sensitive_attributes_are_redacted_at_ingest` |
+| Duplicate rows from retries | `UNIQUE (project_id, event_id)` + `ON CONFLICT DO NOTHING` | `test_duplicates_within_and_across_batches`, Bruno `duplicate`, e2e rerun (1200 → 1200) |
+| Writes to retired projects | Archived project → 401 at ingest; 409 for edits/new keys | `test_archived_project_rejects_ingestion`, `test_archive_hides_from_default_list_and_is_read_only` |
+| Key sprawl | ≤ 10 active keys per project; admin+ only | `test_active_key_limit`, `test_key_permission_matrix` |
+| Key shown in the browser after creation | Plaintext kept only in React state, dropped when the modal closes; never in storage or URL | Vitest `IngestionKeysManager`; Playwright `projects.spec.ts` (gone after reload) |
+
+### Phase 3 residual risks (accepted)
+- **Pepper rotation** invalidates all keys (no key-hash versioning). Documented operational procedure: rotate
+  keys project by project before changing the pepper.
+- **Fixed-window rate limits** allow up to twice the limit across a window boundary. Good enough for abuse
+  protection; not a billing meter.
+- **Idempotency is bounded by retention**: after a row is purged, the same `event_id` is accepted again.
+- **A valid key holder can write arbitrary (validated, redacted) content into its own project**, including
+  misleading logs. Keys are project-scoped and revocable, and synthetic data is flagged.
+- **`last_used_at` is approximate** (60 s granularity).
+- **Clipboard**: copying the key puts it on the OS clipboard, outside our control. The modal warns the user.
+- **Demo event ids are predictable** (uuid5 of scenario/seed/index). Only a holder of that project's key could
+  pre-empt them, and only in that project.
