@@ -21,6 +21,7 @@ from app.schemas.organizations import (
     OrganizationCreate,
     OrganizationListResponse,
     OrganizationOut,
+    OrganizationUpdate,
 )
 from app.services.organizations import OrgScope
 
@@ -29,6 +30,7 @@ router = APIRouter(
 )
 
 OrgRead = Annotated[OrgScope, Depends(require_org_permission(Permission.ORG_READ))]
+OrgUpdate = Annotated[OrgScope, Depends(require_org_permission(Permission.ORG_UPDATE))]
 MembersRead = Annotated[OrgScope, Depends(require_org_permission(Permission.MEMBERS_READ))]
 MembersManage = Annotated[OrgScope, Depends(require_org_permission(Permission.MEMBERS_MANAGE))]
 AuditRead = Annotated[OrgScope, Depends(require_org_permission(Permission.AUDIT_READ))]
@@ -84,6 +86,21 @@ def create_organization(
 )
 def get_organization(scope: OrgRead, service: OrgServiceDep) -> OrganizationOut:
     org = service.get(scope)
+    return OrganizationOut(
+        id=org.id, name=org.name, slug=org.slug, role=scope.role, created_at=org.created_at
+    )
+
+
+@router.patch(
+    "/{org_id}",
+    response_model=OrganizationOut,
+    summary="Rename an organization (owner/admin; the slug does not change)",
+    responses=problem_responses(401, 403, 404, 422),
+)
+def update_organization(
+    body: OrganizationUpdate, scope: OrgUpdate, service: OrgServiceDep, client: ClientDep
+) -> OrganizationOut:
+    org = service.rename(scope, name=body.name, client=client)
     return OrganizationOut(
         id=org.id, name=org.name, slug=org.slug, role=scope.role, created_at=org.created_at
     )

@@ -89,6 +89,26 @@ class OrganizationService:
             raise NotFoundError("Organization not found.")
         return org
 
+    def rename(self, scope: OrgScope, *, name: str, client: ClientInfo) -> Organization:
+        """Rename (ORG_UPDATE: owner/admin). The slug stays stable; the change is audited."""
+        org = self.get(scope)
+        clean = " ".join(name.split())
+        if clean != org.name:
+            previous = org.name
+            org.name = clean
+            self.audit.record(
+                self.db,
+                AuditAction.ORG_UPDATED,
+                actor_user_id=scope.user_id,
+                org_id=org.id,
+                target_type="organization",
+                target_id=org.id,
+                ip_address=client.ip,
+                details={"name": {"from": previous, "to": clean}},
+            )
+            self.db.commit()
+        return org
+
     # --- members ----------------------------------------------------------------------------
     def list_members(self, scope: OrgScope) -> list[OrganizationMember]:
         return self.orgs.list_members(scope.org_id)

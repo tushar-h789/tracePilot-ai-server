@@ -21,6 +21,19 @@ class OrganizationCreate(StrictModel):
         return value
 
 
+class OrganizationUpdate(StrictModel):
+    """Rename only; the slug is a stable identifier and does not change."""
+
+    name: str = Field(min_length=1, max_length=100)
+
+    @field_validator("name")
+    @classmethod
+    def _not_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("Name must not be blank.")
+        return value
+
+
 class OrganizationOut(BaseModel):
     id: uuid.UUID
     name: str

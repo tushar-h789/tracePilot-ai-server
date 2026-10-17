@@ -32,6 +32,7 @@ class AuditAction(StrEnum):
     LOGOUT_ALL = "auth.logout_all"
     SESSION_REVOKED = "auth.session_revoked"
     ORG_CREATED = "org.created"
+    ORG_UPDATED = "org.updated"
     MEMBER_ADDED = "org.member_added"
     MEMBER_ROLE_CHANGED = "org.member_role_changed"
     MEMBER_REMOVED = "org.member_removed"
