@@ -133,8 +133,11 @@ jobs:
         with:
           version: "0.11.24"
       - name: Unit tests on 3.14 with the locked dependency set
+        # uv.lock only records wheel hashes for requires-python (>=3.13,<3.14), so cp314
+        # wheels have no locked hash. Export pinned versions without hashes for this
+        # non-blocking early-warning job; the main jobs still install with hashes.
         run: |
-          uv export --format requirements-txt --no-emit-project --all-groups -o /tmp/requirements.txt
+          uv export --format requirements-txt --no-emit-project --all-groups --no-hashes -o /tmp/requirements.txt
           uv venv --python 3.14 /tmp/venv314
           VIRTUAL_ENV=/tmp/venv314 uv pip install -r /tmp/requirements.txt
           /tmp/venv314/bin/python -m pytest -m "not integration"
