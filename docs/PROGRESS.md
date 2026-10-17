@@ -177,7 +177,7 @@ controls, loading/empty/error states, regenerated API types, Playwright E2E agai
 | Client production build (1 worker) | passed, peak ≈ 0.56 GB |
 | Playwright E2E vs real API | 5/5 passed (peak 615 MB incl. Next server + Chromium) |
 | Web container (`docker compose --profile web build web`) + proxy smoke | built; register 202 → login 200 → me 200 through the container; anonymous `/orgs` → 307 `/login?next=%2Forgs` |
-| gitleaks (full history, both repos) | see the PR description / final report |
+| gitleaks v8.30.1 (full history, both repos) | no leaks found (server 21 commits, client 17 commits) |
 
 Memory rule: the machine already sat at ≈ 19.9 GB used of the 20.8 GB cap from other workloads, so heavy steps
 ran one at a time in `systemd-run --user --scope -p MemoryMax=… -p MemorySwapMax=0`; the client build was
