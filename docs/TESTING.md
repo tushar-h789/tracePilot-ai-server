@@ -277,8 +277,8 @@ New files, 199 tests:
 - `test_logs_api.py` (68), on a 40-row fixture:
   - every filter alone and in combination (level multi, service multi, environment, trace_id, request_id, q);
   - keyset pagination with no duplicates or gaps, including equal timestamps;
-  - limit bounds, bad cursor, a cursor from another filter set;
-  - range validation (inverted, > 30 days, naive);
+  - limit bounds, an exact page boundary with no trailing cursor, a bad cursor;
+  - range validation (inverted, > 30 days, naive, offset converted to UTC);
   - search escaping (tsquery operators, quotes, `%`, `_`);
   - detail (attributes, 404 for another project's id), facets.
 - `test_metrics_api.py` (12): hand-computed fixtures.
