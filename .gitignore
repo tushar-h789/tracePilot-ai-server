@@ -66,3 +66,4 @@ openapi.json.tmp
 *.swp
 .DS_Store
 Thumbs.db
+.e2e-*/
