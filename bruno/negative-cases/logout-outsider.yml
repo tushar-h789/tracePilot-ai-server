@@ -1,7 +1,7 @@
 info:
   name: Logout outsider
   type: http
-  seq: 11
+  seq: 16
 
 http:
   method: POST

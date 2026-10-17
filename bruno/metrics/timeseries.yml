@@ -1,0 +1,29 @@
+info:
+  name: Project timeseries (zero-filled)
+  type: http
+  seq: 2
+
+http:
+  method: GET
+  url: "{{baseUrl}}/projects/{{projectId}}/metrics/timeseries"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |-
+        // 9 = the 8 seeded events + the one valid event stored by ingest/invalid-stored-nothing.
+        const body = res.getBody();
+        test("15-minute buckets for 24 h, zero-filled", function () {
+          expect(body.bucket_seconds).to.equal(900);
+          expect(body.points.length).to.be.within(96, 97);
+          expect(body.points.reduce((s, p) => s + p.events, 0)).to.equal(9);
+          expect(body.points.filter((p) => p.events === 0).length).to.be.above(80);
+        });
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+
+settings:
+  encodeUrl: true
+  timeout: 10000

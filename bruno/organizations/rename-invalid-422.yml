@@ -1,0 +1,31 @@
+info:
+  name: Rename with a blank name (422)
+  type: http
+  seq: 6
+
+http:
+  method: PATCH
+  url: "{{baseUrl}}/organizations/{{orgId}}"
+  headers:
+    - name: X-CSRF-Token
+      value: "{{csrfToken}}"
+  body:
+    type: json
+    data: |-
+      {"name": "   "}
+
+runtime:
+  scripts:
+    - type: tests
+      code: |-
+        test("validation problem", function () {
+          expect(res.getBody().code).to.equal("validation_failed");
+        });
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "422"
+
+settings:
+  encodeUrl: true
+  timeout: 10000

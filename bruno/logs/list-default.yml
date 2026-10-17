@@ -1,0 +1,33 @@
+info:
+  name: List logs, default range (last 24 h)
+  type: http
+  seq: 2
+
+http:
+  method: GET
+  url: "{{baseUrl}}/projects/{{projectId}}/logs"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |-
+        // 9 = the 8 seeded events + the one valid event stored by ingest/invalid-stored-nothing.
+        const body = res.getBody();
+        test("envelope", function () {
+          expect(body).to.have.all.keys("items", "next_cursor", "range_from", "range_to");
+          expect(body.next_cursor).to.equal(null);
+        });
+        test("all 9 events, newest first, no attributes in list", function () {
+          expect(body.items.length).to.equal(9);
+          const ts = body.items.map((i) => i.timestamp);
+          expect([...ts].sort().reverse()).to.deep.equal(ts);
+          expect(body.items[0]).to.not.have.property("attributes");
+        });
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+
+settings:
+  encodeUrl: true
+  timeout: 10000

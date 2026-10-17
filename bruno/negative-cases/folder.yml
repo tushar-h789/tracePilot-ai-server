@@ -1,7 +1,7 @@
 info:
   name: negative-cases
   type: folder
-  seq: 8
+  seq: 10
 
 docs: |-
   Security negative paths: generic login failure (401), missing CSRF header (403), and cross-tenant access

@@ -1,0 +1,29 @@
+info:
+  name: Organization summary
+  type: http
+  seq: 5
+
+http:
+  method: GET
+  url: "{{baseUrl}}/organizations/{{orgId}}/metrics/summary"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |-
+        // 9 = the 8 seeded events + the one valid event stored by ingest/invalid-stored-nothing.
+        const body = res.getBody();
+        test("active projects only, totals match the project", function () {
+          expect(body.project_count).to.equal(1); // projectId2 was archived in projects/
+          expect(body.totals.events).to.equal(9);
+          expect(body.projects[0].project_id).to.equal(bru.getVar("projectId"));
+          expect(body.recent_errors.length).to.equal(3);
+        });
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+
+settings:
+  encodeUrl: true
+  timeout: 10000

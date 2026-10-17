@@ -1,0 +1,33 @@
+info:
+  name: Rename organization
+  type: http
+  seq: 5
+
+http:
+  method: PATCH
+  url: "{{baseUrl}}/organizations/{{orgId}}"
+  headers:
+    - name: X-CSRF-Token
+      value: "{{csrfToken}}"
+  body:
+    type: json
+    data: |-
+      {"name": "  Bruno Org {{runId}}   renamed "}
+
+runtime:
+  scripts:
+    - type: tests
+      code: |-
+        const body = res.getBody();
+        test("name changes, slug stays", function () {
+          expect(body.name).to.equal("Bruno Org " + bru.getVar("runId") + " renamed");
+          expect(body.slug).to.contain("bruno-org");
+        });
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+
+settings:
+  encodeUrl: true
+  timeout: 10000

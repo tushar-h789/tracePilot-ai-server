@@ -1,0 +1,27 @@
+info:
+  name: "Facets: levels, services, environments"
+  type: http
+  seq: 13
+
+http:
+  method: GET
+  url: "{{baseUrl}}/projects/{{projectId}}/logs/facets"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |-
+        // 9 = the 8 seeded events + the one valid event stored by ingest/invalid-stored-nothing.
+        const body = res.getBody();
+        const services = Object.fromEntries(body.services.map((f) => [f.value, f.count]));
+        test("service counts", function () {
+          expect(services).to.deep.equal({ payments: 3, search: 3, "checkout-api": 3 });
+        });
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+
+settings:
+  encodeUrl: true
+  timeout: 10000

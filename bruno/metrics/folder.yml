@@ -1,0 +1,10 @@
+info:
+  name: metrics
+  type: folder
+  seq: 9
+
+docs: |-
+  Project overview / timeseries / services / recent errors and the organization summary, computed over
+  the 8 events ingested by `ingest/ok` + `logs/seed-batch`. Definitions: docs/METRICS.md.
+  Expected: events 8, requests 5, errors 3, request_errors 2, error_rate 0.4, latency withheld
+  (5 samples < 20, reason insufficient_samples).

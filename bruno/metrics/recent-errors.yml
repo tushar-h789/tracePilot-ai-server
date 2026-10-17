@@ -1,0 +1,25 @@
+info:
+  name: Recent errors
+  type: http
+  seq: 4
+
+http:
+  method: GET
+  url: "{{baseUrl}}/projects/{{projectId}}/metrics/recent-errors?limit=5"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |-
+        test("three errors, newest first", function () {
+          const items = res.getBody().items;
+          expect(items.length).to.equal(3);
+        });
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+
+settings:
+  encodeUrl: true
+  timeout: 10000

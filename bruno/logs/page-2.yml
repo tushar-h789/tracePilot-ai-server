@@ -1,0 +1,28 @@
+info:
+  name: "Paginate: second page with the captured cursor"
+  type: http
+  seq: 9
+
+http:
+  method: GET
+  url: "{{baseUrl}}/projects/{{projectId}}/logs?limit=3&cursor={{logCursor}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |-
+        const body = res.getBody();
+        const first = JSON.parse(bru.getVar("page1Ids"));
+        test("next 3, no overlap, older than page 1", function () {
+          expect(body.items.length).to.equal(3);
+          body.items.forEach((i) => expect(first).to.not.include(i.id));
+          expect(body.next_cursor).to.be.a("string");
+        });
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+
+settings:
+  encodeUrl: true
+  timeout: 10000

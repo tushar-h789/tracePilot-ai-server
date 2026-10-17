@@ -1,0 +1,24 @@
+info:
+  name: Range over 30 days (422)
+  type: http
+  seq: 11
+
+http:
+  method: GET
+  url: "{{baseUrl}}/projects/{{projectId}}/logs?from=2026-01-01T00:00:00Z&to=2026-03-01T00:00:00Z"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |-
+        test("range error on from", function () {
+          expect(JSON.stringify(res.getBody())).to.contain("30 days");
+        });
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "422"
+
+settings:
+  encodeUrl: true
+  timeout: 10000

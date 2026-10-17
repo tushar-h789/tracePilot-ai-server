@@ -1,0 +1,32 @@
+info:
+  name: Project overview
+  type: http
+  seq: 1
+
+http:
+  method: GET
+  url: "{{baseUrl}}/projects/{{projectId}}/metrics/overview"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |-
+        // 9 = the 8 seeded events + the one valid event stored by ingest/invalid-stored-nothing.
+        const t = res.getBody().totals;
+        test("hand-computed totals", function () {
+          expect([t.events, t.requests, t.errors, t.request_errors]).to.deep.equal([9, 5, 3, 2]);
+          expect(t.error_rate).to.equal(0.4);
+        });
+        test("latency withheld below the minimum sample size", function () {
+          expect(t.latency.p95_ms).to.equal(null);
+          expect(t.latency.samples).to.equal(5);
+          expect(t.latency.reason).to.equal("insufficient_samples");
+        });
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+
+settings:
+  encodeUrl: true
+  timeout: 10000

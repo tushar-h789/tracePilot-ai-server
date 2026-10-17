@@ -1,0 +1,26 @@
+info:
+  name: Filter by exact trace_id
+  type: http
+  seq: 5
+
+http:
+  method: GET
+  url: "{{baseUrl}}/projects/{{projectId}}/logs?trace_id={{traceId}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |-
+        const items = res.getBody().items;
+        test("both events of the trace", function () {
+          expect(items.length).to.equal(2);
+          items.forEach((i) => expect(i.trace_id).to.equal(bru.getVar("traceId")));
+        });
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+
+settings:
+  encodeUrl: true
+  timeout: 10000

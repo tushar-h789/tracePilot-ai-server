@@ -1,0 +1,27 @@
+info:
+  name: Log detail with attributes
+  type: http
+  seq: 12
+
+http:
+  method: GET
+  url: "{{baseUrl}}/projects/{{projectId}}/logs/{{logId}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |-
+        const body = res.getBody();
+        test("full event", function () {
+          expect(body.id).to.equal(Number(bru.getVar("logId")));
+          expect(body).to.have.property("attributes");
+          expect(body).to.have.property("received_at");
+        });
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+
+settings:
+  encodeUrl: true
+  timeout: 10000

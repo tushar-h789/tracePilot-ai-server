@@ -1,0 +1,31 @@
+info:
+  name: Outsider renames owner org (404)
+  type: http
+  seq: 15
+
+http:
+  method: PATCH
+  url: "{{baseUrl}}/organizations/{{orgId}}"
+  headers:
+    - name: X-CSRF-Token
+      value: "{{csrfToken}}"
+  body:
+    type: json
+    data: |-
+      {"name": "pwned"}
+
+runtime:
+  scripts:
+    - type: tests
+      code: |-
+        test("no existence leak", function () {
+          expect(res.getBody().detail).to.equal("Organization not found.");
+        });
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "404"
+
+settings:
+  encodeUrl: true
+  timeout: 10000

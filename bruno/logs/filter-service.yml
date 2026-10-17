@@ -1,0 +1,26 @@
+info:
+  name: Filter by service_name=payments
+  type: http
+  seq: 4
+
+http:
+  method: GET
+  url: "{{baseUrl}}/projects/{{projectId}}/logs?service_name=payments"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |-
+        const items = res.getBody().items;
+        test("3 payments events", function () {
+          expect(items.length).to.equal(3);
+          items.forEach((i) => expect(i.service_name).to.equal("payments"));
+        });
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+
+settings:
+  encodeUrl: true
+  timeout: 10000

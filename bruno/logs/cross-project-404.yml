@@ -1,0 +1,24 @@
+info:
+  name: Log id through another project (404)
+  type: http
+  seq: 14
+
+http:
+  method: GET
+  url: "{{baseUrl}}/projects/{{projectId2}}/logs/{{logId}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |-
+        test("not found in that project", function () {
+          expect(res.getBody().detail).to.equal("Log event not found.");
+        });
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "404"
+
+settings:
+  encodeUrl: true
+  timeout: 10000

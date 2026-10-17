@@ -1,0 +1,32 @@
+info:
+  name: "Paginate: first page (limit=3)"
+  type: http
+  seq: 8
+
+http:
+  method: GET
+  url: "{{baseUrl}}/projects/{{projectId}}/logs?limit=3"
+
+runtime:
+  scripts:
+    - type: after-response
+      code: |-
+        const body = res.getBody();
+        bru.setVar("logCursor", body.next_cursor);
+        bru.setVar("page1Ids", JSON.stringify(body.items.map((i) => i.id)));
+        bru.setVar("logId", body.items[0].id);
+    - type: tests
+      code: |-
+        const body = res.getBody();
+        test("3 items and a cursor", function () {
+          expect(body.items.length).to.equal(3);
+          expect(body.next_cursor).to.be.a("string");
+        });
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+
+settings:
+  encodeUrl: true
+  timeout: 10000

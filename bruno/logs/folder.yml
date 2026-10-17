@@ -1,0 +1,10 @@
+info:
+  name: logs
+  type: folder
+  seq: 8
+
+docs: |-
+  `GET /projects/{id}/logs` (filters, search, keyset pagination), `/logs/facets`, `/logs/{log_id}`.
+  The first request ingests a known batch of 6 events (run-unique trace id and search token) into
+  `{{projectId}}`, which already holds the 2 events from `ingest/ok`, so every count is exact.
+  Viewer or higher; a non-member gets 404 (see negative-cases).

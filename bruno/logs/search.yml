@@ -1,0 +1,25 @@
+info:
+  name: Full-text search on message
+  type: http
+  seq: 6
+
+http:
+  method: GET
+  url: "{{baseUrl}}/projects/{{projectId}}/logs?q=BrunoToken{{runId}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |-
+        const items = res.getBody().items;
+        test("case-insensitive match on the run token", function () {
+          expect(items.map((i) => i.level).sort()).to.deep.equal(["critical", "error"]);
+        });
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+
+settings:
+  encodeUrl: true
+  timeout: 10000
