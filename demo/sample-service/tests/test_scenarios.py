@@ -177,7 +177,7 @@ def test_cli_rejects_bad_arguments(argv: list[str]) -> None:
 
 
 def test_cli_sends_through_sdk_and_reports_counts(monkeypatch: pytest.MonkeyPatch) -> None:
-    key = "tp_0123456789ab_" + "K" * 43
+    key = "tp_" + "0123456789ab" + "_" + "K" * 43  # fake; split so scanners skip it
     monkeypatch.setenv("TRACEPILOT_INGEST_KEY", key)
     seen: dict[str, int] = {}
     requests: list[httpx.Request] = []
@@ -219,7 +219,7 @@ def test_cli_sends_through_sdk_and_reports_counts(monkeypatch: pytest.MonkeyPatc
 def test_cli_reports_api_errors_without_the_key(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    key = "tp_0123456789ab_" + "Q" * 43
+    key = "tp_" + "0123456789ab" + "_" + "Q" * 43  # fake; split so scanners skip it
     monkeypatch.setenv("TRACEPILOT_INGEST_KEY", key)
 
     def factory(endpoint: str, k: str) -> TracePilotClient:

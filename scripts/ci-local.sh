@@ -49,6 +49,8 @@ for pkg in packages/python-sdk demo/sample-service; do
   )
 done
 if [[ "${SKIP_DOCKER:-0}" != "1" ]]; then
+  step "gitleaks (full history, same as CI)"
+  docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.30.1 git /repo --redact --no-banner
   step "docker build"
   docker build -q -t tracepilot-server:ci . >/dev/null && echo "image built: tracepilot-server:ci"
 fi

@@ -1,0 +1,5 @@
+# Reviewed false positives: obviously fake ingestion-key test fixtures ("tp_0123456789ab_" + "K" * 43).
+# The fixtures were later rewritten so scanners no longer match them; these entries cover history only.
+fdc6d8b791e77b83a2ec1760853146f8eebb5058:demo/sample-service/tests/test_scenarios.py:generic-api-key:180
+fdc6d8b791e77b83a2ec1760853146f8eebb5058:demo/sample-service/tests/test_scenarios.py:generic-api-key:222
+0fe36d2d23910acca08179c720753e09be234e7a:packages/python-sdk/tests/test_client.py:generic-api-key:28
