@@ -288,3 +288,81 @@ then restarted.
 ### Next (Phase 4)
 Log search/explorer API and UI on top of `log_events` (indexes for level/service/time/trace and full-text are
 already in place), plus the retention job.
+
+## Phase 4: log explorer, analytics and product UI (2026-10-17)
+
+Committed directly to `main`. Every push was preceded by green local checks (below).
+
+### Delivered
+- **Logs query API** (`/projects/{id}/logs`, `/logs/facets`, `/logs/{log_id}`), viewer and above:
+  - UTC half-open ranges (default 24 h, max 30 days);
+  - level and service multi-filters, environment, exact trace_id and request_id;
+  - prefix full-text search on the existing `message_tsv` (ADR-024);
+  - keyset pagination (limit ≤ 200, `{items, next_cursor}`, ADR-025);
+  - list items exclude attributes; detail includes them.
+- **Metrics API**:
+  - project overview, time series, per-service and recent errors; org summary and org time series;
+  - totals: events, requests, errors, error rate (`null` without requests);
+  - p50/p95/p99 via `percentile_cont`, with at least 20 samples overall and 5 per bucket, and an explicit
+    `*_reason`;
+  - zero-filled `date_bin` buckets (1m–1d, ≤ 200). See [METRICS.md](METRICS.md) and ADR-026.
+- **`PATCH /organizations/{id}`** rename (owner/admin, audited, slug stable, ADR-028).
+- **Migration `0004_log_query_indexes`**:
+  - covering `(project_id, ts DESC, id DESC) INCLUDE (...)`, replacing `(project_id, ts)`;
+  - partial request_id and error indexes (ADR-027).
+- **Performance**: EXPLAIN on 150,900 rows ([PERFORMANCE.md](PERFORMANCE.md)). Headlines:
+  - request_id lookup 14.5 ms (parallel seq scan) → 0.017 ms;
+  - 24 h totals 12.7 → 7.0 ms (index-only);
+  - facets 9.7 → 2.9 ms;
+  - the default page no longer sorts.
+- **`scripts/seed-demo.sh`** (demo org/project, optional bulk rows) and **`scripts/perf_explain.py`**.
+- **Bruno**: `logs/`, `metrics/`, org rename, cross-tenant negatives.
+- **Docs**: METRICS, PERFORMANCE, ADR-024 to ADR-028, ARCHITECTURE §9f, TESTING §13, this section.
+- **Client** (separate repo): dashboards, logs explorer, new shell and org settings.
+
+### Results (executed locally, 2026-10-17)
+
+| Check | Result |
+| --- | --- |
+| ruff / ruff format / mypy (110 files) / bandit | clean |
+| pytest (real Postgres 18 + Redis 8) | 497 passed (171 unit + 326 integration), coverage 97.88 % |
+| alembic upgrade → downgrade base → upgrade → check | passed (includes 0004) |
+| OpenAPI drift / pip-audit | up to date / no known vulnerabilities |
+| SDK / demo | 23 passed (95.87 %) / 30 passed (97.70 %) |
+| gitleaks (full history) | no leaks |
+| Bruno CLI | 93/93 requests, 100/100 tests, 97/97 assertions; run 3 times, all green |
+| api image build + recreate api/worker/beat | built from cache (no dependency changes); all healthy; `alembic_version` = `0004_log_query_indexes` |
+| GitHub Actions (`f5d77ec`) | green |
+
+First-run failures, fixed before the push:
+- **Search tokenizer (real bug)**: Python's `\w` split Bengali words at combining marks. PostgreSQL keeps them
+  whole, so the tokenizer now keeps Unicode marks.
+- **Authz sweep (test bugs)**:
+  - it expected viewers to read admin-only audit logs and member-only keys; these now assert 403;
+  - the slug and audit field names were wrong.
+- **Bruno (test bugs)**:
+  - expected 8 events instead of 9 (one valid event comes from the ingest folder);
+  - one request was double URL-encoded.
+
+### Memory
+Every heavy step ran alone in `systemd-run --user --scope -p MemoryMax=(21,900 − used − 100) MB -p
+MemorySwapMax=0` after a `free -m` check. The machine idled at about 20.5–21.4 GB, with spikes to 26.4 GB from
+other apps, which forced waits.
+
+| Step | Result |
+| --- | --- |
+| `ci-local.sh` (`SKIP_DOCKER=1`) | under a 717 MB cap |
+| Bruno | under a 506–561 MB cap |
+| api image build (uncapped, watched) | peak 21.23 GB system-wide |
+
+The gitleaks container was run separately with `-m 300m`.
+
+### Known limitations
+- 7-day and 30-day aggregates seq-scan when one project dominates the table; this is correct, and rollups are
+  future work.
+- Search is prefix FTS on the `simple` configuration: no stemming, no phrase or fuzzy search.
+- No live refresh, no saved views. The retention job is still not implemented.
+- Incidents arrive in Phase 5.
+
+### Next (Phase 5)
+Rule-based incident detection on the metrics predicates defined here.

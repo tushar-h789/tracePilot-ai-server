@@ -262,3 +262,55 @@ New folders: `projects/` (12), `ingestion-keys/` (8), `ingest/` (12), plus 5 cro
 
 ### Client
 Vitest: 84 tests. Playwright: 6 E2E tests, including `projects.spec.ts`. See the client repo `docs/PROGRESS.md`.
+
+## 13. Phase 4 implementation status (2026-10-17)
+
+### Server: 497 tests (171 unit + 326 integration), coverage 97.88 % (gate 80 %)
+New files, 199 tests:
+- `test_query_unit.py` (37):
+  - range resolution: default 24 h, half-open, max 30 days, naive datetimes rejected;
+  - bucket choice (≤ 200 buckets);
+  - cursor encode/decode and tampering;
+  - tsquery building: operators stripped, SQL-looking input, Unicode including Bengali combining marks, token and
+    length caps;
+  - null-reason rules.
+- `test_logs_api.py` (68), on a 40-row fixture:
+  - every filter alone and in combination (level multi, service multi, environment, trace_id, request_id, q);
+  - keyset pagination with no duplicates or gaps, including equal timestamps;
+  - limit bounds, bad cursor, a cursor from another filter set;
+  - range validation (inverted, > 30 days, naive);
+  - search escaping (tsquery operators, quotes, `%`, `_`);
+  - detail (attributes, 404 for another project's id), facets.
+- `test_metrics_api.py` (12): hand-computed fixtures.
+  - 17 events, 13 requests, 3 errors, 2 request errors; with 12 samples the percentiles are `null` with
+    `insufficient_samples`.
+  - With 25 samples: p50 13, p95 23.8, p99 24.76 (`percentile_cont`).
+  - Error rate is `null` with `no_requests`.
+  - 180 zero-filled one-minute buckets; bucket p95 95.5 and null for small buckets.
+  - Per-service rows, recent errors, org totals 18/14/4/3 over active projects only.
+- `test_authz_routes.py` (82): the route list is built from the OpenAPI document, so new routes are covered
+  automatically (26 org/project operations today). Path ids are real ids from the victim tenant.
+  - non-member → 404 on all 26 operations;
+  - anonymous → 401 on all 26;
+  - viewer → 200 on the 13 viewer-readable GETs, and 403 on the 2 privileged reads (audit logs, ingestion keys);
+  - an archived project stays readable;
+  - org rename: viewer 403, admin 200, slug unchanged, 422 on invalid input, one `org.updated` audit entry with
+    from/to and none for a no-op.
+
+The OpenAPI drift check, `alembic upgrade → downgrade base → upgrade → check` (including `0004`), mypy (110
+files), bandit and pip-audit all pass in `scripts/ci-local.sh`.
+
+### Bruno: 93 requests, 100 tests, 97 assertions, all passing (run twice against local uvicorn, once against the recreated container)
+- New folders: `logs/` (14) and `metrics/` (7).
+- 2 org rename requests and 5 cross-tenant negatives (logs, log detail, metrics, org metrics, org rename).
+- The counts include the one valid event that `ingest/invalid-stored-nothing` stores in the same project.
+
+### Performance
+EXPLAIN ANALYZE on 150,900 rows, before and after migration `0004`: see [PERFORMANCE.md](PERFORMANCE.md).
+
+### Client
+- Vitest: 129 tests, 87.06 % statements.
+- Playwright: 8/8 E2E, including `dashboard.spec.ts`. That spec registers, creates an org, project and key,
+  ingests, checks the dashboards, filters, searches, paginates, opens the detail drawer, and runs a mobile
+  sidebar check.
+- See the client repo `docs/PROGRESS.md`.
