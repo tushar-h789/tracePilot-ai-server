@@ -1,0 +1,36 @@
+info:
+  name: Liveness
+  type: http
+  seq: 1
+  tags:
+    - smoke
+
+http:
+  method: GET
+  url: "{{baseUrl}}/health/live"
+
+runtime:
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+    - expression: res.body.status
+      operator: eq
+      value: ok
+  scripts:
+    - type: tests
+      code: |-
+        test("returns exactly {status: 'ok'}", function () {
+          expect(res.getBody()).to.eql({ status: "ok" });
+        });
+        test("sets security headers and a request id", function () {
+          expect(res.getHeader("x-content-type-options")).to.equal("nosniff");
+          expect(res.getHeader("x-request-id")).to.be.a("string").and.have.length.above(7);
+        });
+
+settings:
+  encodeUrl: true
+  timeout: 5000
+
+docs: |-
+  Process liveness. Never touches Postgres or Redis; always 200 while the API process serves requests.

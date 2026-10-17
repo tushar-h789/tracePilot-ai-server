@@ -1,0 +1,9 @@
+opencollection: 1.0.0
+info:
+  name: TracePilot AI API
+extensions:
+  bruno:
+    defaultEnvironment: Local
+    ignore:
+      - node_modules
+      - .git
