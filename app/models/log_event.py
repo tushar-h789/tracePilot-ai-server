@@ -44,7 +44,27 @@ class LogEvent(Base):
         ),
         CheckConstraint("duration_ms IS NULL OR duration_ms >= 0", name="duration_non_negative"),
         CheckConstraint("char_length(message) <= 65536", name="message_length"),
-        Index("ix_log_events_project_id_ts", "project_id", text("ts DESC")),
+        # Phase 4 (migration 0004, docs/PERFORMANCE.md): keyset order + covering columns.
+        Index(
+            "ix_log_events_project_id_ts_id",
+            "project_id",
+            text("ts DESC"),
+            text("id DESC"),
+            postgresql_include=["level", "service", "environment", "http_status", "duration_ms"],
+        ),
+        Index(
+            "ix_log_events_project_id_request_id",
+            "project_id",
+            "request_id",
+            postgresql_where=text("request_id IS NOT NULL"),
+        ),
+        Index(
+            "ix_log_events_project_id_errors_ts",
+            "project_id",
+            text("ts DESC"),
+            text("id DESC"),
+            postgresql_where=text("level IN ('error', 'critical') OR http_status >= 500"),
+        ),
         Index("ix_log_events_project_id_level_ts", "project_id", "level", text("ts DESC")),
         Index("ix_log_events_project_id_service_ts", "project_id", "service", text("ts DESC")),
         Index(
