@@ -1,9 +1,8 @@
-"""ORM model registry.
+"""ORM models. Import every model here so Alembic autogenerate/check sees the full metadata."""
 
-Import every model module here so `Base.metadata` is complete for Alembic autogenerate.
-No business tables exist yet (Phase 1); the first ones arrive with auth in Phase 2.
-"""
+from app.models.audit import AuditLog
+from app.models.organization import Organization, OrganizationMember
+from app.models.session import UserSession
+from app.models.user import User
 
-from app.db.base import Base
-
-__all__ = ["Base"]
+__all__ = ["AuditLog", "Organization", "OrganizationMember", "User", "UserSession"]

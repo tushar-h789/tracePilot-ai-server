@@ -1,0 +1,27 @@
+info:
+  name: List members
+  type: http
+  seq: 1
+
+http:
+  method: GET
+  url: "{{baseUrl}}/organizations/{{orgId}}/members"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |-
+        test("the creator is the only (owner) member", function () {
+          const items = res.getBody().items;
+          expect(items).to.have.length(1);
+          expect(items[0].role).to.equal("owner");
+          expect(items[0].user_id).to.equal(bru.getVar("ownerUserId"));
+        });
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+
+settings:
+  encodeUrl: true
+  timeout: 5000

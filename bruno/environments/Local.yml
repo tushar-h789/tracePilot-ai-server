@@ -2,3 +2,8 @@ name: Local
 variables:
   - name: baseUrl
     value: http://localhost:8000/api/v1
+  # Non-secret local placeholders. Emails get a run-unique suffix ({{runId}}) at run time.
+  - name: emailDomain
+    value: example.com
+  - name: demoPassword
+    value: bruno-local-demo-passphrase

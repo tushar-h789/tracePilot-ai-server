@@ -1,0 +1,38 @@
+info:
+  name: Add member by email
+  type: http
+  seq: 2
+
+http:
+  method: POST
+  url: "{{baseUrl}}/organizations/{{orgId}}/members"
+  headers:
+    - name: X-CSRF-Token
+      value: "{{csrfToken}}"
+  body:
+    type: json
+    data: |-
+      {
+        "email": "bruno-member-{{runId}}@{{emailDomain}}",
+        "role": "member"
+      }
+
+runtime:
+  scripts:
+    - type: after-response
+      code: |-
+        bru.setVar("memberUserId", res.getBody().user_id);
+    - type: tests
+      code: |-
+        test("adds the registered user with the requested role", function () {
+          expect(res.getBody().role).to.equal("member");
+          expect(res.getBody().email).to.equal("bruno-member-" + bru.getVar("runId") + "@" + bru.getEnvVar("emailDomain"));
+        });
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "201"
+
+settings:
+  encodeUrl: true
+  timeout: 5000

@@ -1,0 +1,8 @@
+info:
+  name: organization-members
+  type: folder
+  seq: 4
+
+docs: |-
+  Membership management under `/organizations/{orgId}/members` (admin+; only owners can grant/modify the
+  owner role; the last owner cannot be removed or demoted). Uses `{{orgId}}` from `organizations/create`.

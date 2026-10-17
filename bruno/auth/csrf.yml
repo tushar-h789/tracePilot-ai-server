@@ -1,0 +1,45 @@
+info:
+  name: Issue CSRF token
+  type: http
+  seq: 1
+  tags:
+    - smoke
+
+http:
+  method: GET
+  url: "{{baseUrl}}/auth/csrf"
+
+runtime:
+  scripts:
+    - type: before-request
+      code: |-
+        if (!bru.getVar("runId")) {
+          bru.setVar("runId", String(Date.now()));
+        }
+    - type: after-response
+      code: |-
+        bru.setVar("csrfToken", res.getBody().csrf_token);
+    - type: tests
+      code: |-
+        test("returns a signed token and sets the readable cookie", function () {
+          const body = res.getBody();
+          expect(body.header_name).to.equal("X-CSRF-Token");
+          expect(body.csrf_token).to.match(/^[A-Za-z0-9_-]+\.[0-9a-f]{64}$/);
+          const cookies = [].concat(res.getHeader("set-cookie") || []);
+          const csrf = cookies.find((c) => c.startsWith("tp_csrf="));
+          expect(csrf, "tp_csrf cookie").to.be.a("string");
+          expect(csrf.toLowerCase()).to.not.include("httponly");
+          expect(csrf.toLowerCase()).to.include("samesite=lax");
+        });
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+
+settings:
+  encodeUrl: true
+  timeout: 5000
+
+docs: |-
+  Issues a CSRF token bound to the current session cookie (or "anon" before login) and sets it as the
+  readable `tp_csrf` cookie. Every POST/PATCH/DELETE must echo it in `X-CSRF-Token`.

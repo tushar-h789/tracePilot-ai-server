@@ -1,0 +1,26 @@
+info:
+  name: List shows the new organization
+  type: http
+  seq: 4
+
+http:
+  method: GET
+  url: "{{baseUrl}}/organizations"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |-
+        test("new org is listed with role owner", function () {
+          const org = res.getBody().items.find((o) => o.id === bru.getVar("orgId"));
+          expect(org, "created org").to.be.an("object");
+          expect(org.role).to.equal("owner");
+        });
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+
+settings:
+  encodeUrl: true
+  timeout: 5000

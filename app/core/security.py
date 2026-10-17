@@ -1,6 +1,6 @@
-"""HTTP hardening: request ids, security headers, generic error responses.
+"""HTTP hardening: request ids, security headers, problem+json error responses.
 
-Authentication/authorization arrive in Phase 2; nothing here authenticates requests.
+Authentication lives in `app.api.deps` (cookies + CSRF); this module only shapes responses.
 """
 
 from __future__ import annotations
@@ -10,11 +10,15 @@ import re
 import time
 import uuid
 from collections.abc import Awaitable, Callable
+from typing import Any, cast
 
 from fastapi import FastAPI, Request, Response
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.core.config import Settings
+from app.core.errors import AppError
 from app.core.logging import request_id_var
 
 logger = logging.getLogger("app.http")
@@ -61,6 +65,8 @@ def install_http_middleware(app: FastAPI, settings: Settings) -> None:
             response = await call_next(request)
             response.headers.update(security_headers(settings, request.url.path))
             response.headers[REQUEST_ID_HEADER] = request_id
+            # API responses carry personal/session data: never cache unless a route opts in.
+            response.headers.setdefault("Cache-Control", "no-store")
             # Path only: query strings may carry sensitive values and are never logged.
             logger.info(
                 "request",
@@ -76,7 +82,83 @@ def install_http_middleware(app: FastAPI, settings: Settings) -> None:
             request_id_var.reset(token)
 
 
+def _problem(
+    request: Request,
+    status_code: int,
+    title: str,
+    detail: str,
+    *,
+    code: str | None = None,
+    errors: list[dict[str, Any]] | None = None,
+    headers: dict[str, str] | None = None,
+) -> JSONResponse:
+    content: dict[str, Any] = {
+        "type": "about:blank",
+        "title": title,
+        "status": status_code,
+        "detail": detail,
+        "request_id": getattr(request.state, "request_id", None),
+    }
+    if code:
+        content["code"] = code
+    if errors is not None:
+        content["errors"] = errors
+    return JSONResponse(
+        status_code=status_code,
+        media_type="application/problem+json",
+        content=content,
+        headers=headers,
+    )
+
+
+def _safe_validation_errors(exc: RequestValidationError) -> list[dict[str, Any]]:
+    # Never echo `input`/`ctx`: request bodies contain passwords.
+    return [
+        {"loc": list(err.get("loc", ())), "msg": str(err.get("msg", "")), "type": err.get("type")}
+        for err in exc.errors()
+    ]
+
+
 def install_exception_handlers(app: FastAPI, settings: Settings) -> None:
+    async def app_error(request: Request, exc: Exception) -> JSONResponse:
+        exc = cast(AppError, exc)
+        if exc.status_code >= 500:
+            logger.warning("dependency_unavailable", extra={"code": exc.code})
+        return _problem(
+            request,
+            exc.status_code,
+            exc.title,
+            exc.detail,
+            code=exc.code,
+            errors=exc.errors,
+            headers=exc.headers,
+        )
+
+    async def validation_error(request: Request, exc: Exception) -> JSONResponse:
+        return _problem(
+            request,
+            422,
+            "Unprocessable Content",
+            "The request is invalid.",
+            code="validation_failed",
+            errors=_safe_validation_errors(cast(RequestValidationError, exc)),
+        )
+
+    async def http_error(request: Request, exc: Exception) -> JSONResponse:
+        exc = cast(StarletteHTTPException, exc)
+        title = {404: "Not Found", 405: "Method Not Allowed"}.get(exc.status_code, "Error")
+        return _problem(
+            request,
+            exc.status_code,
+            title,
+            str(exc.detail) if exc.status_code < 500 else "An error occurred.",
+            headers=dict(exc.headers or {}),
+        )
+
+    app.add_exception_handler(AppError, app_error)
+    app.add_exception_handler(RequestValidationError, validation_error)
+    app.add_exception_handler(StarletteHTTPException, http_error)
+
     async def unhandled(request: Request, exc: Exception) -> JSONResponse:
         request_id = getattr(request.state, "request_id", None) or uuid.uuid4().hex
         # Full details go to the server log only; responses never include internals.

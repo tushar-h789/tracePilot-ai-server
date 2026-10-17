@@ -1,0 +1,39 @@
+info:
+  name: Create organization
+  type: http
+  seq: 2
+
+http:
+  method: POST
+  url: "{{baseUrl}}/organizations"
+  headers:
+    - name: X-CSRF-Token
+      value: "{{csrfToken}}"
+  body:
+    type: json
+    data: |-
+      {
+        "name": "Bruno Org {{runId}}"
+      }
+
+runtime:
+  scripts:
+    - type: after-response
+      code: |-
+        bru.setVar("orgId", res.getBody().id);
+    - type: tests
+      code: |-
+        test("creator becomes owner; slug is generated", function () {
+          const body = res.getBody();
+          expect(body.role).to.equal("owner");
+          expect(body.name).to.equal("Bruno Org " + bru.getVar("runId"));
+          expect(body.slug).to.match(/^bruno-org-[0-9]+-[0-9a-f]{6}$/);
+        });
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "201"
+
+settings:
+  encodeUrl: true
+  timeout: 5000

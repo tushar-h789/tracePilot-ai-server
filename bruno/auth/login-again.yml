@@ -1,0 +1,55 @@
+info:
+  name: Login again (owner)
+  type: http
+  seq: 10
+
+http:
+  method: POST
+  url: "{{baseUrl}}/auth/login"
+  headers:
+    - name: X-CSRF-Token
+      value: "{{csrfToken}}"
+  body:
+    type: json
+    data: |-
+      {
+        "email": "bruno-owner-{{runId}}@{{emailDomain}}",
+        "password": "{{demoPassword}}"
+      }
+
+runtime:
+  scripts:
+    - type: after-response
+      code: |-
+        const sc = res.getHeader("set-cookie");
+        const list = Array.isArray(sc) ? sc : sc ? [sc] : [];
+        const csrf = list.find((v) => v.startsWith("tp_csrf="));
+        if (csrf) bru.setVar("csrfToken", csrf.split(";")[0].slice("tp_csrf=".length));
+        bru.setVar("ownerUserId", res.getBody().user.id);
+    - type: tests
+      code: |-
+        test("sets an HttpOnly SameSite=Lax session cookie and rotates CSRF", function () {
+          const cookies = [].concat(res.getHeader("set-cookie") || []);
+          const session = cookies.find((c) => c.startsWith("tp_session="));
+          expect(session, "tp_session cookie").to.be.a("string");
+          expect(session).to.include("HttpOnly");
+          expect(session.toLowerCase()).to.include("samesite=lax");
+          expect(session).to.include("Path=/");
+          expect(cookies.some((c) => c.startsWith("tp_csrf="))).to.equal(true);
+        });
+        test("returns the user without any password material", function () {
+          const body = res.getBody();
+          expect(body.user.email).to.equal("bruno-owner-" + bru.getVar("runId") + "@" + bru.getEnvVar("emailDomain"));
+          expect(JSON.stringify(body)).to.not.include("argon2");
+          expect(body).to.not.have.property("password_hash");
+        });
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+    - expression: res.body.session.idle_timeout_seconds
+      operator: isNumber
+
+settings:
+  encodeUrl: true
+  timeout: 10000

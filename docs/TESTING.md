@@ -166,3 +166,45 @@ shell with a real status state, 404 page.
 ### Bruno
 `bruno/` collection (OpenCollection YAML) with assertions + tests per request; run headlessly with
 `cd bruno && bun x @usebruno/cli@4.2.1 run --env Local` against a running API (see `bruno/README.md`).
+
+## 11. Phase 2 implementation status (2026-10-17)
+
+### Server: 182 tests (106 unit + 76 integration), coverage 97.86 % (gate 80 %)
+| File | Tests | What it proves |
+|---|---:|---|
+| `test_identity_unit.py` | 57 | Argon2id params/verify/rehash/dummy verify; password policy (length, common list, equals email); email normalisation; token hashing; CSRF sign/verify/binding/tamper; trusted-proxy IP resolution; full role × permission matrix and every `check_can_*` transition rule |
+| `test_auth_api.py` | 29 | register/login/me/logout flow; generic duplicate registration; no password echo; generic invalid credentials; inactive user; rehash on login; hashed session storage; absolute + idle expiry; touch interval; revocation (one/all/current); fixation; CSRF missing/mismatch/missing-cookie/pre-login token/foreign Origin; rate limits per email/IP/register + `Retry-After`; Redis down → 503 |
+| `test_organizations_api.py` | 42 | create/list/get; mass assignment rejected; auth required; **cross-tenant 404** on every org route; add/change/remove matrices for every actor role × target role; last-owner 409; input validation; case-insensitive email; audit log access + contents; atomic create and rollback; service-level denial audited without a lock wait |
+| `test_log_redaction.py` | 2 | redaction of auth keys; a captured full auth flow contains no password, session token or CSRF token |
+| updated `test_config.py`, `test_http_security.py` | — | prod guards for `SECRET_KEY`, `COOKIE_SECURE`, Argon2 memory floor |
+
+Integration tests use a migrated `_test` database (Alembic `upgrade head` once per session) and `TRUNCATE` all
+tables plus delete `rl:*` keys before each test. Test settings use cheap Argon2 (t=1, m=1 MiB, p=1) for speed;
+the production parameters are unit-tested separately.
+
+### Client: 59 Vitest tests (9 files), coverage 85.5 % statements / 82.3 % branches
+New in Phase 2: `browser-api.test.ts` (credentials include, CSRF header on unsafe methods only, token fetched
+when the cookie is missing, exactly one retry on `csrf_failed`, nothing written to web storage, field-error
+mapping), `auth-guards.test.ts` (proxy redirect rules, server-side `getCurrentUser` forwards only the session
+cookie, client role matrix mirrors the server), `auth-forms.test.tsx` (accessible Zod validation, generic 401
+message, 429 message, safe `next` redirect, password policy, register → sign in), `members-manager.test.tsx`
+(admin vs member controls, server refusal shown, not-found state, empty/create, error with retry).
+
+### Playwright E2E against the real API (5 tests)
+`e2e/auth.spec.ts` runs register → wrong password (generic error) → login → create org → reload and see it →
+members page shows "Owner" → logout → `/orgs` redirects to `/login?next=%2Forgs` → the old cookie gets 401 from
+`/api/v1/auth/me`; it asserts `localStorage`/`sessionStorage` hold no token-like values and, via
+`context.cookies()`, that `tp_session` is HttpOnly + SameSite=Lax + Path=/ while `tp_csrf` is readable. A second
+test proves a stale cookie is rejected by the server-side check. Requires the API stack:
+```bash
+cd ../tracePilot-ai-server && docker compose up -d postgres redis api && docker compose run --rm migrate
+cd ../tracePilot-ai-client && bun run build && bun run test:e2e
+```
+CI does the same in the client's `e2e` job (checks out the matching server branch, starts the stack with
+throwaway credentials).
+
+### Bruno (28 requests, 32 tests)
+Folders `auth`, `organizations`, `organization-members`, `negative-cases`; each run creates unique users
+(`runId`), so it can be re-run against the same database. Run with
+`cd bruno && bunx @usebruno/cli run --env Local`.
+

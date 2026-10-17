@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from enum import StrEnum
 from functools import lru_cache
+from ipaddress import ip_network
 from typing import Annotated, Literal
 from urllib.parse import urlsplit
 
@@ -70,7 +71,32 @@ class Settings(BaseSettings):
 
     celery_task_always_eager: bool = False
 
-    @field_validator("cors_origins", "allowed_hosts", mode="before")
+    # --- Identity / sessions (Phase 2, ADR-018) ---------------------------------------------
+    # Server-side secret for HMAC-signed CSRF tokens. >= 32 chars; prod refuses placeholders.
+    secret_key: SecretStr = Field(min_length=32)
+    # Cookies get `Secure` and the `__Host-` name prefix when true (required in prod / HTTPS).
+    cookie_secure: bool = False
+    session_idle_timeout_minutes: int = Field(default=60, ge=5, le=24 * 60)
+    session_absolute_timeout_hours: int = Field(default=24, ge=1, le=24 * 30)
+    # `last_seen_at` is written at most this often per session (bounds DB writes).
+    session_touch_interval_seconds: int = Field(default=60, ge=0, le=3600)
+    max_sessions_listed: int = Field(default=50, ge=1, le=500)
+
+    # Argon2id cost (argon2-cffi defaults = RFC 9106 low-memory profile: t=3, m=64 MiB, p=4).
+    argon2_time_cost: int = Field(default=3, ge=1, le=10)
+    argon2_memory_cost_kib: int = Field(default=65536, ge=1024, le=262_144)
+    argon2_parallelism: int = Field(default=4, ge=1, le=16)
+
+    # Fixed-window rate limits backed by Redis (requests per window).
+    login_rate_limit_per_email: int = Field(default=5, ge=1, le=1000)
+    login_rate_limit_per_ip: int = Field(default=20, ge=1, le=10_000)
+    login_rate_limit_window_seconds: int = Field(default=60, ge=1, le=86_400)
+    register_rate_limit_per_ip: int = Field(default=20, ge=1, le=10_000)
+    register_rate_limit_window_seconds: int = Field(default=600, ge=1, le=86_400)
+    # Peers (IPs/CIDRs) whose X-Forwarded-For is trusted for the client IP (e.g. the web proxy).
+    trusted_proxies: Annotated[list[str], NoDecode] = Field(default_factory=list)
+
+    @field_validator("cors_origins", "allowed_hosts", "trusted_proxies", mode="before")
     @classmethod
     def _parse_csv(cls, value: object) -> object:
         return _split_csv(value)
@@ -132,6 +158,13 @@ class Settings(BaseSettings):
             problems.append("celery_task_always_eager must be false in prod")
         if self.log_level == "DEBUG":
             problems.append("log_level DEBUG is not allowed in prod")
+        secret_key = self.secret_key.get_secret_value().lower()
+        if any(marker in secret_key for marker in INSECURE_MARKERS):
+            problems.append("secret_key contains a placeholder value")
+        if not self.cookie_secure:
+            problems.append("cookie_secure must be true in prod (HTTPS)")
+        if self.argon2_memory_cost_kib < 19_456:
+            problems.append("argon2_memory_cost_kib must be >= 19456 (OWASP minimum) in prod")
         if problems:
             raise ValueError("insecure production configuration: " + "; ".join(problems))
         return self
@@ -139,6 +172,22 @@ class Settings(BaseSettings):
     @property
     def is_prod(self) -> bool:
         return self.app_env is AppEnv.PROD
+
+    @field_validator("trusted_proxies")
+    @classmethod
+    def _validate_proxies(cls, value: list[str]) -> list[str]:
+        for item in value:
+            ip_network(item, strict=False)  # raises ValueError for garbage
+        return value
+
+    @property
+    def session_cookie_name(self) -> str:
+        # `__Host-` requires Secure + Path=/ + no Domain, so it is only used over HTTPS.
+        return "__Host-tp_session" if self.cookie_secure else "tp_session"
+
+    @property
+    def csrf_cookie_name(self) -> str:
+        return "__Host-tp_csrf" if self.cookie_secure else "tp_csrf"
 
     @property
     def docs_enabled(self) -> bool:

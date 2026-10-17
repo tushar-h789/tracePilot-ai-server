@@ -1,0 +1,27 @@
+info:
+  name: Remove member
+  type: http
+  seq: 5
+
+http:
+  method: DELETE
+  url: "{{baseUrl}}/organizations/{{orgId}}/members/{{memberUserId}}"
+  headers:
+    - name: X-CSRF-Token
+      value: "{{csrfToken}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |-
+        test("no content", function () {
+          expect(res.getBody() || "").to.be.empty;
+        });
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "204"
+
+settings:
+  encodeUrl: true
+  timeout: 5000

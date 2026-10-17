@@ -1,0 +1,33 @@
+info:
+  name: Demote last owner (409)
+  type: http
+  seq: 4
+
+http:
+  method: PATCH
+  url: "{{baseUrl}}/organizations/{{orgId}}/members/{{ownerUserId}}"
+  headers:
+    - name: X-CSRF-Token
+      value: "{{csrfToken}}"
+  body:
+    type: json
+    data: |-
+      {
+        "role": "admin"
+      }
+
+runtime:
+  scripts:
+    - type: tests
+      code: |-
+        test("last-owner protection", function () {
+          expect(res.getBody().detail).to.include("at least one owner");
+        });
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "409"
+
+settings:
+  encodeUrl: true
+  timeout: 5000
