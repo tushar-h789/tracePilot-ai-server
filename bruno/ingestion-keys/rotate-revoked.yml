@@ -1,0 +1,27 @@
+info:
+  name: Rotate a revoked key (409)
+  type: http
+  seq: 7
+
+http:
+  method: POST
+  url: "{{baseUrl}}/projects/{{projectId}}/ingestion-keys/{{revokeKeyId}}/rotate"
+  headers:
+    - name: X-CSRF-Token
+      value: "{{csrfToken}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |-
+        test("only active keys can be rotated", function () {
+          expect(res.getBody().code).to.equal("conflict");
+        });
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "409"
+
+settings:
+  encodeUrl: true
+  timeout: 10000

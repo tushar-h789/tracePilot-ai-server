@@ -1,0 +1,11 @@
+info:
+  name: ingest
+  type: folder
+  seq: 7
+
+docs: |-
+  `POST /ingest/logs`. The only accepted credential is `Authorization: Bearer <ingestion key>`. Session cookies
+  are ignored (the cookie jar still sends them; see `cookie-only-401`) and no CSRF token is needed. The project
+  comes from the key, so `project_id` in the payload is rejected. Validation is all-or-nothing. Event ids are
+  idempotent per project: resending the same event is reported as a duplicate and not stored again.
+  Uses `{{ingestKey}}` from `ingestion-keys/` (a runtime variable).

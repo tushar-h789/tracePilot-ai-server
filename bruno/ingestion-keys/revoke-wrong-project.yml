@@ -1,0 +1,27 @@
+info:
+  name: Revoke key through another project (404)
+  type: http
+  seq: 5
+
+http:
+  method: POST
+  url: "{{baseUrl}}/projects/{{projectId2}}/ingestion-keys/{{revokeKeyId}}/revoke"
+  headers:
+    - name: X-CSRF-Token
+      value: "{{csrfToken}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |-
+        test("a key id from another project is not found", function () {
+          expect(res.getBody().code).to.equal("not_found");
+        });
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "404"
+
+settings:
+  encodeUrl: true
+  timeout: 10000

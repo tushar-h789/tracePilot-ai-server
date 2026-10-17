@@ -1,0 +1,39 @@
+info:
+  name: Payload project_id is rejected (422)
+  type: http
+  seq: 7
+
+http:
+  method: POST
+  url: "{{baseUrl}}/ingest/logs"
+  headers:
+    - name: Authorization
+      value: "Bearer {{ingestKey}}"
+  body:
+    type: json
+    data: |-
+      {
+        "project_id": "{{projectId2}}",
+        "events": [
+          {"event_id": "{{eventId1}}", "timestamp": "{{nowIso}}", "level": "info", "service_name": "x", "message": "m", "project_id": "{{projectId2}}"}
+        ]
+      }
+
+runtime:
+  scripts:
+    - type: tests
+      code: |-
+        test("the project comes from the key only", function () {
+          const body = res.getBody();
+          expect(body.code).to.equal("validation_failed");
+          const types = body.errors.map((e) => e.type);
+          expect(types).to.include("extra_forbidden");
+        });
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "422"
+
+settings:
+  encodeUrl: true
+  timeout: 10000

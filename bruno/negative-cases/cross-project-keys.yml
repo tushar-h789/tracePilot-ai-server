@@ -1,0 +1,24 @@
+info:
+  name: Outsider lists owner project keys (404)
+  type: http
+  seq: 8
+
+http:
+  method: GET
+  url: "{{baseUrl}}/projects/{{projectId}}/ingestion-keys"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |-
+        test("not found, no existence leak", function () {
+          expect(res.getBody().detail).to.equal("Project not found.");
+        });
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "404"
+
+settings:
+  encodeUrl: true
+  timeout: 10000

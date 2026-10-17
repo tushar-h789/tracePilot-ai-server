@@ -1,0 +1,41 @@
+info:
+  name: Create ingestion key
+  type: http
+  seq: 1
+
+http:
+  method: POST
+  url: "{{baseUrl}}/projects/{{projectId}}/ingestion-keys"
+  headers:
+    - name: X-CSRF-Token
+      value: "{{csrfToken}}"
+  body:
+    type: json
+    data: |-
+      {
+        "name": "demo service"
+      }
+
+runtime:
+  scripts:
+    - type: after-response
+      code: |-
+        bru.setVar("keyId", res.getBody().key.id);
+        bru.setVar("ingestKey", res.getBody().secret); // runtime only, never persisted
+    - type: tests
+      code: |-
+        test("plaintext returned once, never cacheable", function () {
+          const body = res.getBody();
+          expect(body.secret).to.match(/^tp_[0-9a-f]{12}_[A-Za-z0-9_-]{43}$/);
+          expect(body.secret.startsWith(body.key.prefix + "_")).to.equal(true);
+          expect(body.key.status).to.equal("active");
+          expect(res.getHeader("cache-control")).to.include("no-store");
+        });
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "201"
+
+settings:
+  encodeUrl: true
+  timeout: 10000

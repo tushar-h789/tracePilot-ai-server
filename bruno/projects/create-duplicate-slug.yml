@@ -1,0 +1,34 @@
+info:
+  name: Create project with a taken slug (409)
+  type: http
+  seq: 3
+
+http:
+  method: POST
+  url: "{{baseUrl}}/organizations/{{orgId}}/projects"
+  headers:
+    - name: X-CSRF-Token
+      value: "{{csrfToken}}"
+  body:
+    type: json
+    data: |-
+      {
+        "name": "Another",
+        "slug": "checkout-{{runId}}"
+      }
+
+runtime:
+  scripts:
+    - type: tests
+      code: |-
+        test("slug is unique per organization", function () {
+          expect(res.getBody().code).to.equal("conflict");
+        });
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "409"
+
+settings:
+  encodeUrl: true
+  timeout: 10000

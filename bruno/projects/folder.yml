@@ -1,0 +1,10 @@
+info:
+  name: projects
+  type: folder
+  seq: 5
+
+docs: |-
+  Projects inside an organization: `/organizations/{orgId}/projects` (list, create) and `/projects/{projectId}`
+  (get, update, archive, restore). Owners and admins manage projects; members and viewers can read them. Slugs
+  are unique per organization. Archiving is a soft delete (`archived_at`): archived projects are hidden unless
+  `include_archived=true` and reject ingestion. Lists use the `{items, next_cursor}` envelope.

@@ -1,0 +1,29 @@
+info:
+  name: Revoke ingestion key
+  type: http
+  seq: 6
+
+http:
+  method: POST
+  url: "{{baseUrl}}/projects/{{projectId}}/ingestion-keys/{{revokeKeyId}}/revoke"
+  headers:
+    - name: X-CSRF-Token
+      value: "{{csrfToken}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |-
+        test("status is revoked", function () {
+          const body = res.getBody();
+          expect(body.status).to.equal("revoked");
+          expect(body.revoked_at).to.be.a("string");
+        });
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+
+settings:
+  encodeUrl: true
+  timeout: 10000

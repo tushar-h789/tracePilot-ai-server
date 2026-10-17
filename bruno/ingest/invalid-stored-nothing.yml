@@ -1,0 +1,35 @@
+info:
+  name: The valid event from the rejected batch was not stored
+  type: http
+  seq: 6
+
+http:
+  method: POST
+  url: "{{baseUrl}}/ingest/logs"
+  headers:
+    - name: Authorization
+      value: "Bearer {{ingestKey}}"
+  body:
+    type: json
+    data: |-
+      {
+        "events": [
+          {"event_id": "{{eventId3}}", "timestamp": "{{nowIso}}", "level": "info", "service_name": "checkout-api", "message": "valid"}
+        ]
+      }
+
+runtime:
+  scripts:
+    - type: tests
+      code: |-
+        test("all-or-nothing: the event is new", function () {
+          expect(res.getBody().accepted).to.equal(1);
+        });
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "202"
+
+settings:
+  encodeUrl: true
+  timeout: 10000

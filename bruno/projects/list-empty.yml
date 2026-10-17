@@ -1,0 +1,26 @@
+info:
+  name: List projects (empty)
+  type: http
+  seq: 1
+
+http:
+  method: GET
+  url: "{{baseUrl}}/organizations/{{orgId}}/projects"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |-
+        test("paginated envelope, nothing yet", function () {
+          const body = res.getBody();
+          expect(body.items).to.be.an("array").that.is.empty;
+          expect(body.next_cursor).to.equal(null);
+        });
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+
+settings:
+  encodeUrl: true
+  timeout: 10000

@@ -1,0 +1,34 @@
+info:
+  name: Create project with unknown field (422)
+  type: http
+  seq: 4
+
+http:
+  method: POST
+  url: "{{baseUrl}}/organizations/{{orgId}}/projects"
+  headers:
+    - name: X-CSRF-Token
+      value: "{{csrfToken}}"
+  body:
+    type: json
+    data: |-
+      {
+        "name": "Bad",
+        "org_id": "00000000-0000-0000-0000-000000000000"
+      }
+
+runtime:
+  scripts:
+    - type: tests
+      code: |-
+        test("extra fields are forbidden (the org comes from the path)", function () {
+          expect(res.getBody().code).to.equal("validation_failed");
+        });
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "422"
+
+settings:
+  encodeUrl: true
+  timeout: 10000

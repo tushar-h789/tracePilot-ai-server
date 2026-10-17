@@ -1,0 +1,27 @@
+info:
+  name: Archive project
+  type: http
+  seq: 8
+
+http:
+  method: POST
+  url: "{{baseUrl}}/projects/{{projectId2}}/archive"
+  headers:
+    - name: X-CSRF-Token
+      value: "{{csrfToken}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |-
+        test("archived_at is set", function () {
+          expect(res.getBody().archived_at).to.be.a("string");
+        });
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+
+settings:
+  encodeUrl: true
+  timeout: 10000

@@ -1,0 +1,37 @@
+info:
+  name: Key replaced by rotation (401)
+  type: http
+  seq: 9
+
+http:
+  method: POST
+  url: "{{baseUrl}}/ingest/logs"
+  headers:
+    - name: Authorization
+      value: "Bearer {{oldIngestKey}}"
+  body:
+    type: json
+    data: |-
+      {
+        "events": [
+          {"event_id": "{{eventId1}}", "timestamp": "{{nowIso}}", "level": "info", "service_name": "x", "message": "m"}
+        ]
+      }
+
+runtime:
+  scripts:
+    - type: tests
+      code: |-
+        test("generic 401, no hint about why", function () {
+          expect(res.getBody().code).to.equal("invalid_ingestion_key");
+          expect(res.getBody().detail).to.equal("A valid ingestion key is required.");
+          expect(res.getHeader("www-authenticate")).to.equal("Bearer");
+        });
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "401"
+
+settings:
+  encodeUrl: true
+  timeout: 10000

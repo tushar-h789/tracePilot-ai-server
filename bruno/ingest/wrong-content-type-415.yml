@@ -1,0 +1,37 @@
+info:
+  name: Non-JSON content type (415)
+  type: http
+  seq: 12
+
+http:
+  method: POST
+  url: "{{baseUrl}}/ingest/logs"
+  headers:
+    - name: Authorization
+      value: "Bearer {{ingestKey}}"
+    - name: Content-Type
+      value: "text/plain"
+  body:
+    type: json
+    data: |-
+      {
+        "events": [
+          {"event_id": "{{eventId1}}", "timestamp": "{{nowIso}}", "level": "info", "service_name": "x", "message": "m"}
+        ]
+      }
+
+runtime:
+  scripts:
+    - type: tests
+      code: |-
+        test("only application/json is accepted", function () {
+          expect(res.getBody().code).to.equal("unsupported_media_type");
+        });
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "415"
+
+settings:
+  encodeUrl: true
+  timeout: 10000

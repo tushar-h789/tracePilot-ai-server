@@ -1,0 +1,27 @@
+info:
+  name: Outsider revokes owner key (404)
+  type: http
+  seq: 10
+
+http:
+  method: POST
+  url: "{{baseUrl}}/projects/{{projectId}}/ingestion-keys/{{keyId}}/revoke"
+  headers:
+    - name: X-CSRF-Token
+      value: "{{csrfToken}}"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |-
+        test("not found, no existence leak", function () {
+          expect(res.getBody().detail).to.equal("Project not found.");
+        });
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "404"
+
+settings:
+  encodeUrl: true
+  timeout: 10000

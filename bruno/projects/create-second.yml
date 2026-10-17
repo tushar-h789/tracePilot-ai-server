@@ -1,0 +1,36 @@
+info:
+  name: Create a second project (to archive)
+  type: http
+  seq: 7
+
+http:
+  method: POST
+  url: "{{baseUrl}}/organizations/{{orgId}}/projects"
+  headers:
+    - name: X-CSRF-Token
+      value: "{{csrfToken}}"
+  body:
+    type: json
+    data: |-
+      {
+        "name": "Legacy {{runId}}"
+      }
+
+runtime:
+  scripts:
+    - type: after-response
+      code: |-
+        bru.setVar("projectId2", res.getBody().id);
+    - type: tests
+      code: |-
+        test("slug generated from the name", function () {
+          expect(res.getBody().slug).to.match(/^legacy-[0-9]+/);
+        });
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "201"
+
+settings:
+  encodeUrl: true
+  timeout: 10000

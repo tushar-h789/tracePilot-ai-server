@@ -1,0 +1,36 @@
+info:
+  name: Update project
+  type: http
+  seq: 6
+
+http:
+  method: PATCH
+  url: "{{baseUrl}}/projects/{{projectId}}"
+  headers:
+    - name: X-CSRF-Token
+      value: "{{csrfToken}}"
+  body:
+    type: json
+    data: |-
+      {
+        "name": "Checkout API {{runId}}",
+        "retention_days": 14
+      }
+
+runtime:
+  scripts:
+    - type: tests
+      code: |-
+        test("fields updated", function () {
+          const body = res.getBody();
+          expect(body.name).to.equal("Checkout API " + bru.getVar("runId"));
+          expect(body.retention_days).to.equal(14);
+        });
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+
+settings:
+  encodeUrl: true
+  timeout: 10000

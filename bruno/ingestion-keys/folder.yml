@@ -1,0 +1,10 @@
+info:
+  name: ingestion-keys
+  type: folder
+  seq: 6
+
+docs: |-
+  Ingestion key management under `/projects/{projectId}/ingestion-keys` (owner/admin; members can read metadata).
+  The plaintext key (`secret`) is returned exactly once, with `Cache-Control: no-store`. These requests copy it into
+  **runtime variables** (`ingestKey`, `oldIngestKey`, `revokedKey`) that exist only in memory for the run and are
+  never written to an environment file. Lists never contain the secret or its hash.

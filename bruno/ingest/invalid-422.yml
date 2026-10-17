@@ -1,0 +1,46 @@
+info:
+  name: One invalid event rejects the whole batch (422)
+  type: http
+  seq: 5
+
+http:
+  method: POST
+  url: "{{baseUrl}}/ingest/logs"
+  headers:
+    - name: Authorization
+      value: "Bearer {{ingestKey}}"
+  body:
+    type: json
+    data: |-
+      {
+        "events": [
+          {"event_id": "{{eventId3}}", "timestamp": "{{nowIso}}", "level": "info", "service_name": "checkout-api", "message": "valid"},
+          {"event_id": "not-a-uuid", "timestamp": "2026-10-17T07:00:00", "level": "fatal", "service_name": "has spaces", "message": "invalid"}
+        ]
+      }
+
+runtime:
+  scripts:
+    - type: before-request
+      code: |-
+        const run = String(bru.getVar("runId")).padStart(12, "0").slice(-12);
+        bru.setVar("eventId3", "e0000000-0000-4000-8002-" + run);
+        bru.setVar("nowIso", new Date().toISOString());
+    - type: tests
+      code: |-
+        test("errors point at the bad event and never echo input", function () {
+          const body = res.getBody();
+          expect(body.code).to.equal("validation_failed");
+          const locs = body.errors.map((e) => e.loc.join("."));
+          expect(locs.some((l) => l.startsWith("body.events.1"))).to.equal(true);
+          expect(locs.some((l) => l.startsWith("body.events.0"))).to.equal(false);
+          expect(JSON.stringify(body)).to.not.include("has spaces");
+        });
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "422"
+
+settings:
+  encodeUrl: true
+  timeout: 10000

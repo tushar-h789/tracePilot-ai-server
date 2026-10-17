@@ -1,0 +1,33 @@
+info:
+  name: Update archived project (409)
+  type: http
+  seq: 9
+
+http:
+  method: PATCH
+  url: "{{baseUrl}}/projects/{{projectId2}}"
+  headers:
+    - name: X-CSRF-Token
+      value: "{{csrfToken}}"
+  body:
+    type: json
+    data: |-
+      {
+        "name": "Nope"
+      }
+
+runtime:
+  scripts:
+    - type: tests
+      code: |-
+        test("archived projects are read-only", function () {
+          expect(res.getBody().detail).to.include("archived");
+        });
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "409"
+
+settings:
+  encodeUrl: true
+  timeout: 10000

@@ -1,0 +1,43 @@
+info:
+  name: Create project
+  type: http
+  seq: 2
+
+http:
+  method: POST
+  url: "{{baseUrl}}/organizations/{{orgId}}/projects"
+  headers:
+    - name: X-CSRF-Token
+      value: "{{csrfToken}}"
+  body:
+    type: json
+    data: |-
+      {
+        "name": "Checkout {{runId}}",
+        "slug": "checkout-{{runId}}",
+        "environment": "production"
+      }
+
+runtime:
+  scripts:
+    - type: after-response
+      code: |-
+        bru.setVar("projectId", res.getBody().id);
+    - type: tests
+      code: |-
+        test("created in the org with the caller's role", function () {
+          const body = res.getBody();
+          expect(body.org_id).to.equal(bru.getVar("orgId"));
+          expect(body.slug).to.equal("checkout-" + bru.getVar("runId"));
+          expect(body.environment).to.equal("production");
+          expect(body.archived_at).to.equal(null);
+          expect(body.role).to.equal("owner");
+        });
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "201"
+
+settings:
+  encodeUrl: true
+  timeout: 10000

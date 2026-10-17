@@ -1,0 +1,33 @@
+info:
+  name: Outsider creates a key in owner project (404)
+  type: http
+  seq: 9
+
+http:
+  method: POST
+  url: "{{baseUrl}}/projects/{{projectId}}/ingestion-keys"
+  headers:
+    - name: X-CSRF-Token
+      value: "{{csrfToken}}"
+  body:
+    type: json
+    data: |-
+      {
+        "name": "stolen"
+      }
+
+runtime:
+  scripts:
+    - type: tests
+      code: |-
+        test("not found, no existence leak", function () {
+          expect(res.getBody().detail).to.equal("Project not found.");
+        });
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "404"
+
+settings:
+  encodeUrl: true
+  timeout: 10000

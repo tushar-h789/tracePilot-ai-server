@@ -1,0 +1,54 @@
+info:
+  name: Ingest the same batch again (duplicates)
+  type: http
+  seq: 2
+
+http:
+  method: POST
+  url: "{{baseUrl}}/ingest/logs"
+  headers:
+    - name: Authorization
+      value: "Bearer {{ingestKey}}"
+  body:
+    type: json
+    data: |-
+      {
+        "events": [
+          {
+            "event_id": "{{eventId1}}",
+            "timestamp": "{{nowIso}}",
+            "level": "error",
+            "service_name": "checkout-api",
+            "message": "POST /api/checkout failed: database query timed out",
+            "http_method": "POST",
+            "http_path": "/api/checkout",
+            "http_status": 504,
+            "duration_ms": 5012.5,
+            "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
+            "attributes": {"synthetic": true, "source": "bruno", "password": "hunter2"}
+          },
+          {
+            "event_id": "{{eventId2}}",
+            "timestamp": "{{nowIso}}",
+            "level": "info",
+            "service_name": "checkout-api",
+            "message": "GET /api/cart 200"
+          }
+        ]
+      }
+
+runtime:
+  scripts:
+    - type: tests
+      code: |-
+        test("idempotent: nothing new stored", function () {
+          expect(res.getBody()).to.deep.equal({ received: 2, accepted: 0, duplicates: 2, rejected: 0 });
+        });
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "202"
+
+settings:
+  encodeUrl: true
+  timeout: 10000

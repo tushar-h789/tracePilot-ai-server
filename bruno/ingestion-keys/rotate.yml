@@ -1,0 +1,48 @@
+info:
+  name: Rotate ingestion key (no grace)
+  type: http
+  seq: 3
+
+http:
+  method: POST
+  url: "{{baseUrl}}/projects/{{projectId}}/ingestion-keys/{{keyId}}/rotate"
+  headers:
+    - name: X-CSRF-Token
+      value: "{{csrfToken}}"
+  body:
+    type: json
+    data: |-
+      {
+        "grace_seconds": 0
+      }
+
+runtime:
+  scripts:
+    - type: after-response
+      code: |-
+        bru.setVar("oldIngestKey", bru.getVar("ingestKey"));
+        bru.setVar("keyId", res.getBody().key.id);
+        bru.setVar("ingestKey", res.getBody().secret);
+    - type: tests
+      code: |-
+        test("plaintext returned once, never cacheable", function () {
+          const body = res.getBody();
+          expect(body.secret).to.match(/^tp_[0-9a-f]{12}_[A-Za-z0-9_-]{43}$/);
+          expect(body.secret.startsWith(body.key.prefix + "_")).to.equal(true);
+          expect(body.key.status).to.equal("active");
+          expect(res.getHeader("cache-control")).to.include("no-store");
+        });
+
+        test("the previous key is revoked immediately and linked to the new one", function () {
+          const prev = res.getBody().previous_key;
+          expect(prev.status).to.equal("revoked");
+          expect(prev.replaced_by_id).to.equal(res.getBody().key.id);
+        });
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "201"
+
+settings:
+  encodeUrl: true
+  timeout: 10000

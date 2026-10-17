@@ -1,0 +1,43 @@
+info:
+  name: Too many events in one batch (422)
+  type: http
+  seq: 4
+
+http:
+  method: POST
+  url: "{{baseUrl}}/ingest/logs"
+  headers:
+    - name: Authorization
+      value: "Bearer {{ingestKey}}"
+  body:
+    type: json
+    data: |-
+      {}
+
+runtime:
+  scripts:
+    - type: before-request
+      code: |-
+        const now = new Date().toISOString();
+        const events = [];
+        for (let i = 0; i < 501; i++) {
+          const hex = i.toString(16).padStart(12, "0");
+          events.push({ event_id: "f0000000-0000-4000-8000-" + hex, timestamp: now, level: "info",
+                        service_name: "bruno", message: "event " + i });
+        }
+        req.setBody(JSON.stringify({ events: events }));
+    - type: tests
+      code: |-
+        test("batch limit enforced, nothing stored", function () {
+          const body = res.getBody();
+          expect(body.code).to.equal("validation_failed");
+          expect(body.detail).to.include("at most 500 events");
+        });
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "422"
+
+settings:
+  encodeUrl: true
+  timeout: 10000

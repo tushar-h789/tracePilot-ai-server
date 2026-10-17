@@ -1,0 +1,25 @@
+info:
+  name: List keys including revoked
+  type: http
+  seq: 8
+
+http:
+  method: GET
+  url: "{{baseUrl}}/projects/{{projectId}}/ingestion-keys?include_revoked=true"
+
+runtime:
+  scripts:
+    - type: tests
+      code: |-
+        test("include_revoked shows all three keys with their status", function () {
+          const statuses = res.getBody().items.map((k) => k.status).sort();
+          expect(statuses).to.deep.equal(["active", "revoked", "revoked"]);
+        });
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+
+settings:
+  encodeUrl: true
+  timeout: 10000

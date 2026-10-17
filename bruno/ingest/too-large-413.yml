@@ -1,0 +1,35 @@
+info:
+  name: Oversized body (413)
+  type: http
+  seq: 3
+
+http:
+  method: POST
+  url: "{{baseUrl}}/ingest/logs"
+  headers:
+    - name: Authorization
+      value: "Bearer {{ingestKey}}"
+  body:
+    type: json
+    data: |-
+      {}
+
+runtime:
+  scripts:
+    - type: before-request
+      code: |-
+        // 1.1 MiB: rejected from Content-Length before any parsing (limit INGEST_MAX_BODY_BYTES = 1 MiB).
+        req.setBody(JSON.stringify({ events: [], pad: "x".repeat(1153434) }));
+    - type: tests
+      code: |-
+        test("payload too large", function () {
+          expect(res.getBody().code).to.equal("payload_too_large");
+        });
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "413"
+
+settings:
+  encodeUrl: true
+  timeout: 10000
