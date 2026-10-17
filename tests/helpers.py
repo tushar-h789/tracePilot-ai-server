@@ -155,3 +155,31 @@ def make_event(index: int = 0, **overrides: Any) -> dict[str, Any]:
     }
     event.update(overrides)
     return event
+
+
+# --- Phase 4 ------------------------------------------------------------------------------------
+def insert_events(db: Any, project_id: str, rows: list[dict[str, Any]]) -> list[int]:
+    """Insert log_events directly (exact timestamps, any age) and return their ids in order."""
+    from app.models import LogEvent
+
+    models = []
+    for row in rows:
+        values: dict[str, Any] = {
+            "project_id": uuid.UUID(project_id),
+            "event_id": uuid.uuid4(),
+            "level": "info",
+            "service": "api",
+            "environment": "production",
+            "message": "hello",
+            "attributes": {},
+            "is_synthetic": True,
+            **row,
+        }
+        models.append(LogEvent(**values))
+    db.add_all(models)
+    db.commit()
+    return [m.id for m in models]
+
+
+def iso(value: datetime) -> str:
+    return value.isoformat()
