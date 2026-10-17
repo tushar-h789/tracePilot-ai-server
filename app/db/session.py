@@ -32,10 +32,17 @@ def build_sessionmaker(engine: Engine) -> sessionmaker[Session]:
 
 
 def get_db(request: Request) -> Iterator[Session]:
-    """FastAPI dependency: one request-scoped session, always closed."""
+    """FastAPI dependency: one request-scoped session (unit of work).
+
+    Services commit at their transaction boundary; any exception rolls back everything that was
+    not committed; the session is always closed.
+    """
     factory: sessionmaker[Session] = request.app.state.session_factory
     session = factory()
     try:
         yield session
+    except Exception:
+        session.rollback()
+        raise
     finally:
         session.close()
