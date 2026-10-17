@@ -34,15 +34,23 @@ class FixedWindowRateLimiter:
     def __init__(self, redis_client: Redis) -> None:
         self._redis = redis_client
 
-    def hit(self, key: str, *, limit: int, window_seconds: int) -> RateLimitResult:
+    def hit(
+        self,
+        key: str,
+        *,
+        limit: int,
+        window_seconds: int,
+        amount: int = 1,
+        unavailable_message: str = "Sign-in is temporarily unavailable.",
+    ) -> RateLimitResult:
         try:
             pipe = self._redis.pipeline(transaction=True)
-            pipe.incr(key)
+            pipe.incrby(key, amount)
             pipe.expire(key, window_seconds, nx=True)
             pipe.ttl(key)
             count, _, ttl = pipe.execute()
         except RedisError as exc:
-            raise ServiceUnavailableError("Sign-in is temporarily unavailable.") from exc
+            raise ServiceUnavailableError(unavailable_message) from exc
         retry_after = int(ttl) if isinstance(ttl, int) and ttl > 0 else window_seconds
         return RateLimitResult(
             allowed=int(count) <= limit, count=int(count), limit=limit, retry_after=retry_after

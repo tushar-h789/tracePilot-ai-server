@@ -100,6 +100,7 @@ def test_prod_refuses_placeholder_credentials(make_settings: SettingsFactory) ->
         {"cookie_secure": False},
         {"argon2_memory_cost_kib": 1024},
         {"secret_key": "change-me-please-change-me-please-0123456789"},
+        {"ingest_key_pepper": "change-me-please-change-me-please-0123456789"},
     ],
 )
 def test_prod_refuses_insecure_options(

@@ -96,6 +96,21 @@ class Settings(BaseSettings):
     # Peers (IPs/CIDRs) whose X-Forwarded-For is trusted for the client IP (e.g. the web proxy).
     trusted_proxies: Annotated[list[str], NoDecode] = Field(default_factory=list)
 
+    # --- Phase 3: projects, ingestion keys, ingestion ------------------------------------------
+    # HMAC-SHA256 pepper for ingestion key hashes. Separate from SECRET_KEY so rotating the CSRF
+    # signing key does not invalidate every ingestion key (ADR-021).
+    ingest_key_pepper: SecretStr = Field(min_length=32)
+    max_active_keys_per_project: int = Field(default=10, ge=1, le=100)
+    key_rotation_max_grace_seconds: int = Field(default=86_400, ge=0, le=7 * 86_400)
+    ingest_max_body_bytes: int = Field(default=1_048_576, ge=1024, le=10 * 1_048_576)
+    ingest_max_batch_events: int = Field(default=500, ge=1, le=1000)
+    ingest_max_past_seconds: int = Field(default=7 * 86_400, ge=60, le=30 * 86_400)
+    ingest_max_future_seconds: int = Field(default=300, ge=0, le=86_400)
+    ingest_rate_limit_requests_per_key: int = Field(default=120, ge=1, le=100_000)
+    ingest_rate_limit_events_per_project: int = Field(default=50_000, ge=1, le=10_000_000)
+    ingest_rate_limit_window_seconds: int = Field(default=60, ge=1, le=3600)
+    ingest_key_touch_interval_seconds: int = Field(default=60, ge=0, le=3600)
+
     @field_validator("cors_origins", "allowed_hosts", "trusted_proxies", mode="before")
     @classmethod
     def _parse_csv(cls, value: object) -> object:
@@ -161,6 +176,9 @@ class Settings(BaseSettings):
         secret_key = self.secret_key.get_secret_value().lower()
         if any(marker in secret_key for marker in INSECURE_MARKERS):
             problems.append("secret_key contains a placeholder value")
+        pepper = self.ingest_key_pepper.get_secret_value().lower()
+        if any(marker in pepper for marker in INSECURE_MARKERS):
+            problems.append("ingest_key_pepper contains a placeholder value")
         if not self.cookie_secure:
             problems.append("cookie_secure must be true in prod (HTTPS)")
         if self.argon2_memory_cost_kib < 19_456:

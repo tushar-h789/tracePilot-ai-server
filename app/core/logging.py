@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import sys
 from contextvars import ContextVar
 from datetime import UTC, datetime
@@ -33,7 +34,14 @@ SENSITIVE_KEY_PARTS = (
     "private_key",
     "database_url",
     "redis_url",
+    "ingest_key",
+    "ingestion_key",
+    "bearer",
+    "plaintext",
 )
+# Value-level scrubbing (defence in depth): a full ingestion key that ends up inside a log
+# message or string field keeps only its public prefix.
+INGEST_KEY_VALUE_RE = re.compile(r"\b(tp_[0-9a-f]{12})_[A-Za-z0-9_-]{43}")
 REDACTED = "[REDACTED]"
 
 # Attributes present on every LogRecord; anything else came from `extra=`.
@@ -45,9 +53,18 @@ def _is_sensitive(key: str) -> bool:
     return any(part in lowered for part in SENSITIVE_KEY_PARTS)
 
 
+def scrub_secrets(text: str) -> str:
+    """Replace full ingestion keys inside free text with `<prefix>_[REDACTED]`."""
+    if "tp_" not in text:
+        return text
+    return INGEST_KEY_VALUE_RE.sub(r"\1_[REDACTED]", text)
+
+
 def redact(value: Any, key: str = "") -> Any:
     if key and _is_sensitive(key):
         return REDACTED
+    if isinstance(value, str):
+        return scrub_secrets(value)
     if isinstance(value, dict):
         return {k: redact(v, str(k)) for k, v in value.items()}
     if isinstance(value, (list, tuple)):
@@ -61,7 +78,7 @@ class JsonFormatter(logging.Formatter):
             "ts": datetime.fromtimestamp(record.created, tz=UTC).isoformat(timespec="milliseconds"),
             "level": record.levelname.lower(),
             "logger": record.name,
-            "message": record.getMessage(),
+            "message": scrub_secrets(record.getMessage()),
         }
         request_id = request_id_var.get()
         if request_id:
@@ -72,7 +89,7 @@ class JsonFormatter(logging.Formatter):
             payload[key] = redact(value, key)
         if record.exc_info:
             payload["exc_type"] = record.exc_info[0].__name__ if record.exc_info[0] else None
-            payload["exc"] = self.formatException(record.exc_info)
+            payload["exc"] = scrub_secrets(self.formatException(record.exc_info))
         return json.dumps(payload, default=str, ensure_ascii=False)
 
 

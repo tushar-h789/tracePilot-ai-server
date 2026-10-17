@@ -29,6 +29,7 @@ x-app: &app
     DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:?set POSTGRES_USER in .env}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:?set POSTGRES_DB in .env}
     REDIS_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}@redis:6379/0
     SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY in .env (>= 32 random chars)}
+    INGEST_KEY_PEPPER: ${INGEST_KEY_PEPPER:?set INGEST_KEY_PEPPER in .env (>= 32 random chars)}
     COOKIE_SECURE: ${COOKIE_SECURE:-false}
     TRUSTED_PROXIES: ${TRUSTED_PROXIES:-}
     CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3100,http://127.0.0.1:3100}

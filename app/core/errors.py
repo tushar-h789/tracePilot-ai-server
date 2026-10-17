@@ -64,6 +64,18 @@ class OriginNotAllowedError(AppError):
         super().__init__("Request origin is not allowed.")
 
 
+class InvalidIngestionKeyError(AppError):
+    status_code = 401
+    title = "Unauthorized"
+    code = "invalid_ingestion_key"
+
+    def __init__(self) -> None:
+        # One message for missing, malformed, unknown, revoked, expired and archived-project keys.
+        super().__init__(
+            "A valid ingestion key is required.", headers={"WWW-Authenticate": "Bearer"}
+        )
+
+
 class PermissionDeniedError(AppError):
     status_code = 403
     title = "Forbidden"
@@ -85,6 +97,18 @@ class ConflictError(AppError):
     code = "conflict"
 
 
+class PayloadTooLargeError(AppError):
+    status_code = 413
+    title = "Content Too Large"
+    code = "payload_too_large"
+
+
+class UnsupportedMediaTypeError(AppError):
+    status_code = 415
+    title = "Unsupported Media Type"
+    code = "unsupported_media_type"
+
+
 class ValidationFailedError(AppError):
     status_code = 422
     title = "Unprocessable Content"
@@ -96,9 +120,11 @@ class RateLimitedError(AppError):
     title = "Too Many Requests"
     code = "rate_limited"
 
-    def __init__(self, retry_after: int) -> None:
+    def __init__(
+        self, retry_after: int, detail: str = "Too many attempts. Please wait and try again."
+    ) -> None:
         super().__init__(
-            "Too many attempts. Please wait and try again.",
+            detail,
             headers={"Retry-After": str(max(1, retry_after))},
         )
         self.retry_after = max(1, retry_after)
