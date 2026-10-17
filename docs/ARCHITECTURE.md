@@ -452,6 +452,44 @@ Pre-aggregated minute rollups are future work if NFR-04 targets are missed.
   whose source log has expired. `ingest_batches` purged after 7 days. Project deletion → soft-delete flag
   immediately (hidden, keys revoked), then batched hard delete by a worker task.
 
+### 9f. Phase 4: log explorer and metrics API (migration `0004_log_query_indexes`, 2026-10-17)
+
+All routes require a session. Reads need `PROJECT_READ` (project routes) or `ORG_READ` (org
+routes), so viewers can read. A non-member gets 404. Archived projects stay readable.
+
+| Method and path | Purpose |
+| --- | --- |
+| `GET /projects/{id}/logs` | Filters: `from`, `to`, `level` (repeatable), `service_name` (repeatable, max 20), `environment`, `trace_id`, `request_id`, `q` (≤ 200 chars, full-text search), `cursor`, `limit` (1–200, default 50). Returns `{items, next_cursor, range_from, range_to}`, newest first. |
+| `GET /projects/{id}/logs/facets` | Levels, top 100 services and top 20 environments, with counts for the range |
+| `GET /projects/{id}/logs/{log_id}` | Full event including `attributes` and `received_at` |
+| `GET /projects/{id}/metrics/overview` | Totals: events, requests, errors, request_errors, error_rate, latency p50/p95/p99 |
+| `GET /projects/{id}/metrics/timeseries` | Zero-filled `date_bin` buckets (1m…1d, ≤ 200) |
+| `GET /projects/{id}/metrics/services` | Per-service summary (top 50) |
+| `GET /projects/{id}/metrics/recent-errors?limit=` | Newest error events (1–50, default 10) |
+| `GET /organizations/{id}/metrics/summary` | Org totals, per-project rows and recent errors across active projects |
+| `GET /organizations/{id}/metrics/timeseries` | Org-wide buckets |
+| `PATCH /organizations/{id}` | Rename the org (owner and admin; slug unchanged; audited as `org.updated`) |
+
+Time ranges are half-open `[from, to)`, default to the last 24 h and may span at most 30 days
+(`app/core/time_range.py`). Metric definitions are in [METRICS.md](METRICS.md); the search,
+pagination, metrics and index decisions are ADR-024 to ADR-028.
+
+Layers: `routes/logs.py` and `routes/metrics.py` → `services/logs.py` and
+`services/metrics.py` (range resolution, cursor handling, null semantics) →
+`repositories/log_queries.py`. Every SQL statement lives in that repository, built with
+SQLAlchemy Core, with the metric predicates (`IS_REQUEST`, `IS_ERROR`, `IS_SAMPLE`) defined once.
+
+Indexes on `log_events` after migration 0004 (measurements in [PERFORMANCE.md](PERFORMANCE.md)):
+
+| Index | Serves |
+| --- | --- |
+| `(project_id, ts DESC, id DESC) INCLUDE (level, service, environment, http_status, duration_ms)` | Keyset list order and cursor; index-only metric aggregates |
+| `(project_id, level, ts DESC)` / `(project_id, service, ts DESC)` | Single-level and single-service filters, facets |
+| `(project_id, trace_id) WHERE trace_id IS NOT NULL` | Exact trace lookup |
+| `(project_id, request_id) WHERE request_id IS NOT NULL` | Exact request lookup (new) |
+| `(project_id, ts DESC, id DESC) WHERE level IN ('error','critical') OR http_status >= 500` | Recent errors and error-level filters (new) |
+| GIN `message_tsv` | Full-text search (`to_tsquery('simple', …)`) |
+
 ## 10. Local development strategy
 
 - `docker compose up -d` (server repo) runs postgres, redis, api, worker, beat; migrations are applied explicitly

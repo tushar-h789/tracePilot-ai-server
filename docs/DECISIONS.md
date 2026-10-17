@@ -352,3 +352,86 @@ Date for all Phase 0 ADRs: 2026-10-17.
   - All other fields come from `random.Random("tracepilot-demo:{scenario}:{seed}")`, plus evenly spaced timestamps
     from `--start`.
   - Every event is tagged `environment="demo"` and `attributes.synthetic=true`.
+
+## ADR-024: Log search uses PostgreSQL full-text search (prefix tsquery), not pg_trgm (2026-10-17)
+
+**Context.** The log explorer needs text search on `message`. Options: `ILIKE '%x%'` (seq scan),
+`pg_trgm` GIN (substring and fuzzy matching; needs an extension and a large index), or
+full-text search on the generated `message_tsv` column (`to_tsvector('simple', message)`), which
+already has a GIN index from Phase 3.
+
+**Decision.** Use FTS with the `simple` configuration (no stemming or stop words, so `500`,
+`db-primary` and identifiers stay searchable). The server tokenises `q` itself: Unicode `\w+`
+runs, lower-cased, at most **8 tokens of up to 64 characters**, joined as `tok:* & tok2:*`
+(every word, prefix match). `q` is capped at **200 characters** (422 above that). The tsquery
+string is a bound parameter given to `to_tsquery('simple', :q)`, and because only `\w` characters
+survive, tsquery operators typed by a user (`& | ! ( ) : * '`) can never cause a syntax error or
+change the query's meaning. Input that contains only punctuation means "no text filter".
+
+**Consequences.** No new extension. The existing GIN index serves the search, and the planner
+can also walk the `(project_id, ts, id)` index and filter. Substring matches in the middle of a
+word (`imeou` -> `timeout`) are not supported, and neither is fuzzy matching. If users need
+them, add `pg_trgm` with a GIN index on `message` in a later migration and keep this API
+contract. Tests: `tests/test_query_unit.py::test_search_tsquery`,
+`tests/test_logs_api.py::test_search_escaping_never_errors`.
+
+## ADR-025: Log keyset pagination, time-range rules and list/detail split (2026-10-17)
+
+**Decision.**
+- Order is `ts DESC, id DESC`. The cursor is base64url JSON `{"v":1,"ts":"<iso>","id":<int>}`
+  and the next page is `WHERE (ts, id) < (:ts, :id)`. Limit defaults to 50 (1..200, 422
+  otherwise). The server fetches `limit + 1` rows, so `next_cursor` is null exactly when no rows
+  remain. The envelope is `{items, next_cursor, range_from, range_to}`, the same as ADR-022 plus
+  the resolved range. A malformed cursor (bad base64 or JSON, unknown version, naive timestamp,
+  non-positive or non-integer id) is a 422 Problem response and never a 500.
+- Rows ingested later with newer timestamps never shift later pages. Rows with older timestamps
+  inserted mid-walk can appear on later pages, as is normal for keyset pagination.
+- Time range: half-open `[from, to)`, aware datetimes only, default last 24 h, at most 30 days,
+  and `from < to`. One helper (`app/core/time_range.py`) is shared by logs, facets and metrics.
+- List items omit `attributes` (which can be up to 16 KB each). `GET /logs/{id}` returns the full
+  event including `attributes` and `received_at`. Facets (levels / top 100 services / top 20
+  environments with counts) are separate, bounded GROUP BY queries.
+- `log_id` is the BIGINT identity, scoped by `project_id` in the WHERE clause, so an id from
+  another project returns 404.
+
+## ADR-026: Metric definitions, null semantics and on-request aggregation (2026-10-17)
+
+**Decision.** The definitions in `docs/METRICS.md` are normative. In short:
+- request = `http_status IS NOT NULL`
+- error = level error/critical OR status >= 500
+- error rate = request_errors / requests
+- percentiles = `percentile_cont` over requests that have `duration_ms`
+
+The predicates are defined once as SQLAlchemy expressions (`IS_REQUEST`, `IS_ERROR`,
+`IS_SAMPLE`). A metric that cannot be computed honestly is `null` with a machine-readable reason:
+- `no_requests`
+- `no_latency_samples`
+- `insufficient_samples`, when below 20 samples for summary metrics or 5 per time bucket
+
+Time series are zero-filled with `generate_series` over `date_bin` buckets (1m/5m/15m/1h/6h/1d,
+≤ 200 buckets). Org metrics cover non-archived projects only. Archived projects are still
+readable on their own pages.
+
+**Why not rollups now.** On-request aggregation with a covering index (ADR-027) answers 24 h
+in under 10 ms and 7 d in about 100 ms at 150k rows per project (docs/PERFORMANCE.md).
+Rollups add write amplification and the risk of staleness. They are deferred until data volume
+requires them.
+
+## ADR-027: Log query indexes (2026-10-17)
+
+**Decision.** Migration 0004 makes three changes, measured in docs/PERFORMANCE.md:
+- It replaces `(project_id, ts DESC)` with `(project_id, ts DESC, id DESC) INCLUDE (level,
+  service, environment, http_status, duration_ms)`. This index serves the keyset order without
+  a sort, and it serves the metric aggregates and facets as index-only scans.
+- It adds a partial index on `(project_id, request_id)`.
+- It adds a partial "errors" index on `(project_id, ts DESC, id DESC)`.
+
+The extra write cost on ingest is accepted: there are 3 more index entries per row, about 22 MB
+of index at 150k rows.
+
+## ADR-028: Organization rename (2026-10-17)
+
+`PATCH /organizations/{org_id}` with `{name}` (1–100 characters, whitespace collapsed, extra
+fields rejected) is allowed for owner and admin only (`ORG_UPDATE`). The slug stays the same, so
+links stay valid. A change writes an `org.updated` audit entry with `{name: {from, to}}`. A no-op
+rename writes nothing.

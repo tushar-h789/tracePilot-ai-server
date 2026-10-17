@@ -1,0 +1,249 @@
+### logs: default 24h page
+Limit (actual time=0.009..0.030 rows=51.00 loops=1)
+  Buffers: shared hit=55
+  ->  Index Scan using ix_log_events_project_id_ts_id on log_events (actual time=0.009..0.026 rows=51.00 loops=1)
+        Index Cond: ((project_id = '01a1490e-6b7d-7b5e-85cd-ea657b881410'::uuid) AND (ts >= '2026-10-16 08:52:42.885782+00'::timestamp with time zone) AND (ts < '2026-10-17 08:52:42.885782+00'::timestamp with time zone))
+        Index Searches: 1
+        Buffers: shared hit=55
+Planning Time: 0.064 ms
+Execution Time: 0.038 ms
+
+### logs: page 2 (keyset cursor)
+Limit (actual time=0.011..0.030 rows=51.00 loops=1)
+  Buffers: shared hit=55
+  ->  Index Scan using ix_log_events_project_id_ts_id on log_events (actual time=0.011..0.028 rows=51.00 loops=1)
+        Index Cond: ((project_id = '01a1490e-6b7d-7b5e-85cd-ea657b881410'::uuid) AND (ts >= '2026-10-16 08:52:42.885782+00'::timestamp with time zone) AND (ts < '2026-10-17 08:52:42.885782+00'::timestamp with time zone) AND (ROW(ts, id) < ROW('2026-10-17 08:47:45.09463+00'::timestamp with time zone, 32875)))
+        Index Searches: 1
+        Buffers: shared hit=55
+Planning Time: 0.067 ms
+Execution Time: 0.041 ms
+
+### logs: level=error,critical (7d)
+Limit (actual time=0.014..0.047 rows=51.00 loops=1)
+  Buffers: shared hit=59
+  ->  Index Scan using ix_log_events_project_id_errors_ts on log_events (actual time=0.013..0.044 rows=51.00 loops=1)
+        Index Cond: ((project_id = '01a1490e-6b7d-7b5e-85cd-ea657b881410'::uuid) AND (ts >= '2026-10-10 08:52:42.885782+00'::timestamp with time zone) AND (ts < '2026-10-17 08:52:42.885782+00'::timestamp with time zone))
+        Filter: ((level)::text = ANY ('{critical,error}'::text[]))
+        Rows Removed by Filter: 5
+        Index Searches: 1
+        Buffers: shared hit=59
+Planning Time: 0.087 ms
+Execution Time: 0.057 ms
+
+### logs: service=payments (7d)
+Limit (actual time=0.062..0.082 rows=51.00 loops=1)
+  Buffers: shared hit=55
+  ->  Incremental Sort (actual time=0.061..0.079 rows=51.00 loops=1)
+        Sort Key: ts DESC, id DESC
+        Presorted Key: ts
+        Full-sort Groups: 2  Sort Method: quicksort  Average Memory: 33kB  Peak Memory: 33kB
+        Buffers: shared hit=55
+        ->  Index Scan using ix_log_events_project_id_service_ts on log_events (actual time=0.022..0.058 rows=52.00 loops=1)
+              Index Cond: ((project_id = '01a1490e-6b7d-7b5e-85cd-ea657b881410'::uuid) AND ((service)::text = 'payments'::text) AND (ts >= '2026-10-10 08:52:42.885782+00'::timestamp with time zone) AND (ts < '2026-10-17 08:52:42.885782+00'::timestamp with time zone))
+              Index Searches: 1
+              Buffers: shared hit=55
+Planning Time: 0.076 ms
+Execution Time: 0.092 ms
+
+### logs: q='timeout' (7d)
+Limit (actual time=0.013..0.145 rows=51.00 loops=1)
+  Buffers: shared hit=345
+  ->  Index Scan using ix_log_events_project_id_ts_id on log_events (actual time=0.012..0.142 rows=51.00 loops=1)
+        Index Cond: ((project_id = '01a1490e-6b7d-7b5e-85cd-ea657b881410'::uuid) AND (ts >= '2026-10-10 08:52:42.885782+00'::timestamp with time zone) AND (ts < '2026-10-17 08:52:42.885782+00'::timestamp with time zone))
+        Filter: (message_tsv @@ '''timeout'':*'::tsquery)
+        Rows Removed by Filter: 289
+        Index Searches: 1
+        Buffers: shared hit=345
+Planning:
+  Buffers: shared hit=1
+Planning Time: 0.072 ms
+Execution Time: 0.153 ms
+
+### logs: q='inventory 503' rare-ish (7d)
+Limit (actual time=19.881..19.891 rows=51.00 loops=1)
+  Buffers: shared hit=6505
+  ->  Sort (actual time=19.880..19.886 rows=51.00 loops=1)
+        Sort Key: ts DESC, id DESC
+        Sort Method: top-N heapsort  Memory: 46kB
+        Buffers: shared hit=6505
+        ->  Bitmap Heap Scan on log_events (actual time=7.056..15.997 rows=24997.00 loops=1)
+              Recheck Cond: (message_tsv @@ '''inventory'':* & ''503'':*'::tsquery)
+              Filter: ((ts >= '2026-10-10 08:52:42.885782+00'::timestamp with time zone) AND (ts < '2026-10-17 08:52:42.885782+00'::timestamp with time zone) AND (project_id = '01a1490e-6b7d-7b5e-85cd-ea657b881410'::uuid))
+              Rows Removed by Filter: 3
+              Heap Blocks: exact=6485
+              Buffers: shared hit=6505
+              ->  Bitmap Index Scan on ix_log_events_message_tsv (actual time=6.471..6.471 rows=25000.00 loops=1)
+                    Index Cond: (message_tsv @@ '''inventory'':* & ''503'':*'::tsquery)
+                    Index Searches: 1
+                    Buffers: shared hit=20
+Planning:
+  Buffers: shared hit=1
+Planning Time: 0.150 ms
+Execution Time: 20.012 ms
+
+### logs: trace_id exact (7d)
+Limit (actual time=0.012..0.012 rows=1.00 loops=1)
+  Buffers: shared hit=4
+  ->  Sort (actual time=0.011..0.012 rows=1.00 loops=1)
+        Sort Key: ts DESC, id DESC
+        Sort Method: quicksort  Memory: 25kB
+        Buffers: shared hit=4
+        ->  Index Scan using ix_log_events_project_id_trace_id on log_events (actual time=0.009..0.009 rows=1.00 loops=1)
+              Index Cond: ((project_id = '01a1490e-6b7d-7b5e-85cd-ea657b881410'::uuid) AND ((trace_id)::text = 'c4ca4238a0b923820dcc509a6f75849b'::text))
+              Filter: ((ts >= '2026-10-10 08:52:42.885782+00'::timestamp with time zone) AND (ts < '2026-10-17 08:52:42.885782+00'::timestamp with time zone))
+              Index Searches: 1
+              Buffers: shared hit=4
+Planning Time: 0.083 ms
+Execution Time: 0.022 ms
+
+### logs: request_id exact (7d)
+Limit (actual time=0.010..0.010 rows=1.00 loops=1)
+  Buffers: shared hit=4
+  ->  Sort (actual time=0.009..0.010 rows=1.00 loops=1)
+        Sort Key: ts DESC, id DESC
+        Sort Method: quicksort  Memory: 25kB
+        Buffers: shared hit=4
+        ->  Index Scan using ix_log_events_project_id_request_id on log_events (actual time=0.008..0.008 rows=1.00 loops=1)
+              Index Cond: ((project_id = '01a1490e-6b7d-7b5e-85cd-ea657b881410'::uuid) AND ((request_id)::text = 'bulk-77777'::text))
+              Filter: ((ts >= '2026-10-10 08:52:42.885782+00'::timestamp with time zone) AND (ts < '2026-10-17 08:52:42.885782+00'::timestamp with time zone))
+              Index Searches: 1
+              Buffers: shared hit=4
+Planning Time: 0.061 ms
+Execution Time: 0.017 ms
+
+### facets: services (24h)
+Limit (actual time=2.852..2.854 rows=9.00 loops=1)
+  Buffers: shared hit=225
+  ->  Sort (actual time=2.852..2.852 rows=9.00 loops=1)
+        Sort Key: (count(*)) DESC, service
+        Sort Method: quicksort  Memory: 25kB
+        Buffers: shared hit=225
+        ->  GroupAggregate (actual time=0.496..2.848 rows=9.00 loops=1)
+              Group Key: service
+              Buffers: shared hit=225
+              ->  Index Only Scan using ix_log_events_project_id_service_ts on log_events (actual time=0.012..1.681 rows=22251.00 loops=1)
+                    Index Cond: ((project_id = '01a1490e-6b7d-7b5e-85cd-ea657b881410'::uuid) AND (ts >= '2026-10-16 08:52:42.885782+00'::timestamp with time zone) AND (ts < '2026-10-17 08:52:42.885782+00'::timestamp with time zone))
+                    Heap Fetches: 0
+                    Index Searches: 7
+                    Buffers: shared hit=225
+Planning Time: 0.070 ms
+Execution Time: 2.864 ms
+
+### metrics: totals (24h)
+Aggregate (actual time=6.932..6.932 rows=1.00 loops=1)
+  Buffers: shared hit=237
+  ->  Index Only Scan using ix_log_events_project_id_ts_id on log_events (actual time=0.012..2.064 rows=22251.00 loops=1)
+        Index Cond: ((project_id = '01a1490e-6b7d-7b5e-85cd-ea657b881410'::uuid) AND (ts >= '2026-10-16 08:52:42.885782+00'::timestamp with time zone) AND (ts < '2026-10-17 08:52:42.885782+00'::timestamp with time zone))
+        Heap Fetches: 0
+        Index Searches: 1
+        Buffers: shared hit=237
+Planning Time: 0.111 ms
+Execution Time: 6.950 ms
+
+### metrics: totals (7d)
+Aggregate (actual time=66.481..66.482 rows=1.00 loops=1)
+  Buffers: shared hit=6604
+  ->  Seq Scan on log_events (actual time=0.143..24.100 rows=150880.00 loops=1)
+        Filter: ((ts >= '2026-10-10 08:52:42.885782+00'::timestamp with time zone) AND (ts < '2026-10-17 08:52:42.885782+00'::timestamp with time zone) AND (project_id = '01a1490e-6b7d-7b5e-85cd-ea657b881410'::uuid))
+        Rows Removed by Filter: 1227
+        Buffers: shared hit=6604
+Planning Time: 0.177 ms
+Execution Time: 66.515 ms
+
+### metrics: timeseries (24h, 15m buckets)
+Merge Left Join (actual time=4.467..9.738 rows=97.00 loops=1)
+  Merge Cond: ((generate_series('2026-10-16 08:45:00+00'::timestamp with time zone, '2026-10-17 08:52:42.885781+00'::timestamp with time zone, '00:15:00'::interval)) = (date_bin('00:15:00'::interval, log_events.ts, '2000-01-01 00:00:00+00'::timestamp with time zone)))
+  Buffers: shared hit=237
+  ->  Sort (actual time=0.011..0.018 rows=97.00 loops=1)
+        Sort Key: (generate_series('2026-10-16 08:45:00+00'::timestamp with time zone, '2026-10-17 08:52:42.885781+00'::timestamp with time zone, '00:15:00'::interval))
+        Sort Method: quicksort  Memory: 25kB
+        ->  ProjectSet (actual time=0.001..0.007 rows=97.00 loops=1)
+              ->  Result (actual time=0.000..0.001 rows=1.00 loops=1)
+  ->  GroupAggregate (actual time=4.454..9.694 rows=97.00 loops=1)
+        Group Key: (date_bin('00:15:00'::interval, log_events.ts, '2000-01-01 00:00:00+00'::timestamp with time zone))
+        Buffers: shared hit=237
+        ->  Sort (actual time=4.409..5.057 rows=22251.00 loops=1)
+              Sort Key: (date_bin('00:15:00'::interval, log_events.ts, '2000-01-01 00:00:00+00'::timestamp with time zone))
+              Sort Method: quicksort  Memory: 1654kB
+              Buffers: shared hit=237
+              ->  Index Only Scan using ix_log_events_project_id_ts_id on log_events (actual time=0.012..2.341 rows=22251.00 loops=1)
+                    Index Cond: ((project_id = '01a1490e-6b7d-7b5e-85cd-ea657b881410'::uuid) AND (ts >= '2026-10-16 08:52:42.885782+00'::timestamp with time zone) AND (ts < '2026-10-17 08:52:42.885782+00'::timestamp with time zone))
+                    Heap Fetches: 0
+                    Index Searches: 1
+                    Buffers: shared hit=237
+Planning Time: 0.170 ms
+Execution Time: 9.784 ms
+
+### metrics: timeseries (7d, 1h buckets)
+Merge Left Join (actual time=61.980..108.435 rows=169.00 loops=1)
+  Merge Cond: ((generate_series('2026-10-10 08:00:00+00'::timestamp with time zone, '2026-10-17 08:52:42.885781+00'::timestamp with time zone, '01:00:00'::interval)) = (date_bin('01:00:00'::interval, log_events.ts, '2000-01-01 00:00:00+00'::timestamp with time zone)))
+  Buffers: shared hit=6604, temp read=626 written=628
+  ->  Sort (actual time=0.016..0.032 rows=169.00 loops=1)
+        Sort Key: (generate_series('2026-10-10 08:00:00+00'::timestamp with time zone, '2026-10-17 08:52:42.885781+00'::timestamp with time zone, '01:00:00'::interval))
+        Sort Method: quicksort  Memory: 25kB
+        ->  ProjectSet (actual time=0.001..0.010 rows=169.00 loops=1)
+              ->  Result (actual time=0.000..0.001 rows=1.00 loops=1)
+  ->  GroupAggregate (actual time=61.947..108.315 rows=169.00 loops=1)
+        Group Key: (date_bin('01:00:00'::interval, log_events.ts, '2000-01-01 00:00:00+00'::timestamp with time zone))
+        Buffers: shared hit=6604, temp read=626 written=628
+        ->  Sort (actual time=61.887..72.549 rows=150880.00 loops=1)
+              Sort Key: (date_bin('01:00:00'::interval, log_events.ts, '2000-01-01 00:00:00+00'::timestamp with time zone))
+              Sort Method: external merge  Disk: 5008kB
+              Buffers: shared hit=6604, temp read=626 written=628
+              ->  Seq Scan on log_events (actual time=0.089..31.546 rows=150880.00 loops=1)
+                    Filter: ((ts >= '2026-10-10 08:52:42.885782+00'::timestamp with time zone) AND (ts < '2026-10-17 08:52:42.885782+00'::timestamp with time zone) AND (project_id = '01a1490e-6b7d-7b5e-85cd-ea657b881410'::uuid))
+                    Rows Removed by Filter: 1227
+                    Buffers: shared hit=6604
+Planning Time: 0.183 ms
+Execution Time: 109.686 ms
+
+### metrics: per service (24h)
+Limit (actual time=12.221..12.223 rows=9.00 loops=1)
+  Buffers: shared hit=237
+  ->  Sort (actual time=12.219..12.220 rows=9.00 loops=1)
+        Sort Key: (count(*)) DESC, service
+        Sort Method: quicksort  Memory: 26kB
+        Buffers: shared hit=237
+        ->  GroupAggregate (actual time=7.149..12.212 rows=9.00 loops=1)
+              Group Key: service
+              Buffers: shared hit=237
+              ->  Sort (actual time=6.031..6.793 rows=22251.00 loops=1)
+                    Sort Key: service
+                    Sort Method: quicksort  Memory: 1678kB
+                    Buffers: shared hit=237
+                    ->  Index Only Scan using ix_log_events_project_id_ts_id on log_events (actual time=0.022..2.427 rows=22251.00 loops=1)
+                          Index Cond: ((project_id = '01a1490e-6b7d-7b5e-85cd-ea657b881410'::uuid) AND (ts >= '2026-10-16 08:52:42.885782+00'::timestamp with time zone) AND (ts < '2026-10-17 08:52:42.885782+00'::timestamp with time zone))
+                          Heap Fetches: 0
+                          Index Searches: 1
+                          Buffers: shared hit=237
+Planning Time: 0.177 ms
+Execution Time: 12.256 ms
+
+### metrics: recent errors (24h)
+Limit (actual time=0.016..0.025 rows=10.00 loops=1)
+  Buffers: shared hit=15
+  ->  Nested Loop (actual time=0.015..0.024 rows=10.00 loops=1)
+        Buffers: shared hit=15
+        ->  Index Scan using ix_log_events_project_id_errors_ts on log_events (actual time=0.011..0.016 rows=10.00 loops=1)
+              Index Cond: ((project_id = '01a1490e-6b7d-7b5e-85cd-ea657b881410'::uuid) AND (ts >= '2026-10-16 08:52:42.885782+00'::timestamp with time zone) AND (ts < '2026-10-17 08:52:42.885782+00'::timestamp with time zone))
+              Index Searches: 1
+              Buffers: shared hit=13
+        ->  Materialize (actual time=0.000..0.000 rows=1.00 loops=10)
+              Storage: Memory  Maximum Storage: 17kB
+              Buffers: shared hit=2
+              ->  Index Scan using pk_projects on projects (actual time=0.002..0.003 rows=1.00 loops=1)
+                    Index Cond: (id = '01a1490e-6b7d-7b5e-85cd-ea657b881410'::uuid)
+                    Index Searches: 1
+                    Buffers: shared hit=2
+Planning Time: 0.164 ms
+Execution Time: 0.036 ms
+
+### org: per project (7d)
+GroupAggregate (actual time=65.579..65.580 rows=1.00 loops=1)
+  Buffers: shared hit=6604
+  ->  Seq Scan on log_events (actual time=0.088..23.838 rows=150880.00 loops=1)
+        Filter: ((ts >= '2026-10-10 08:52:42.885782+00'::timestamp with time zone) AND (ts < '2026-10-17 08:52:42.885782+00'::timestamp with time zone) AND (project_id = '01a1490e-6b7d-7b5e-85cd-ea657b881410'::uuid))
+        Rows Removed by Filter: 1227
+        Buffers: shared hit=6604
+Planning Time: 0.117 ms
+Execution Time: 65.606 ms
