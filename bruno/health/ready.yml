@@ -1,0 +1,42 @@
+info:
+  name: Readiness
+  type: http
+  seq: 2
+  tags:
+    - smoke
+
+http:
+  method: GET
+  url: "{{baseUrl}}/health/ready"
+
+runtime:
+  assertions:
+    - expression: res.status
+      operator: eq
+      value: "200"
+    - expression: res.body.status
+      operator: eq
+      value: ok
+  scripts:
+    - type: tests
+      code: |-
+        test("reports database and redis checks", function () {
+          const body = res.getBody();
+          expect(body).to.have.all.keys("status", "checks");
+          expect(body.checks).to.have.all.keys("database", "redis");
+          for (const name of ["database", "redis"]) {
+            expect(body.checks[name].status).to.equal("ok");
+            expect(body.checks[name].latency_ms).to.be.a("number").and.at.least(0);
+          }
+        });
+        test("is not cacheable", function () {
+          expect(res.getHeader("cache-control")).to.equal("no-store");
+        });
+
+settings:
+  encodeUrl: true
+  timeout: 5000
+
+docs: |-
+  Readiness: 200 when Postgres (`SELECT 1`) and Redis (`PING`) respond, 503 with the same body shape
+  and `status: unavailable` when any check fails. No internal error details are returned.

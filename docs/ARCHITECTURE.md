@@ -63,7 +63,7 @@ Notes
   Ollama has no host port by default. Host ports 3000 and 3001 are already used on the dev machine → web defaults
   to **3100** (configurable via `WEB_PORT`).
 - The `web` service builds from the sibling path `../tracePilot-ai-client` and sits behind a Compose profile
-  (`--profile web`) so the backend can run alone while the client runs with `npm run dev`.
+  (`--profile web`) so the backend can run alone while the client runs with `bun run dev`.
 - The API is the **only** writer of user-facing state; the worker writes only investigation results, incidents
   (detection), and retention deletions through the same service/repository layer.
 
@@ -88,6 +88,31 @@ app/
 migrations/               # Alembic
 tools/generator/          # synthetic log generator CLI (P3); python SDK later
 tests/                    # unit, integration, api, contract, security
+```
+
+### Phase 1 implemented layout (2026-10-17)
+
+```
+app/
+  main.py                    # create_app(settings) factory: middleware, CORS, TrustedHost, routers
+  api/deps.py                # DI: settings, health service (auth/scope deps arrive in P2)
+  api/v1/router.py           # aggregates module routers
+  api/v1/routes/health.py    # GET /health/live, GET /health/ready
+  core/config.py             # pydantic-settings; fail-fast, secret-free error messages; prod guards
+  core/logging.py            # stdlib JSON logs + request_id contextvar + key-based redaction
+  core/security.py           # request id, security headers, generic problem+json 500 handler
+  db/base.py, db/session.py  # DeclarativeBase (naming convention), engine/sessionmaker, get_db
+  models/                    # model registry (empty in P1)
+  schemas/health.py          # Pydantic response models (OpenAPI contract)
+  repositories/health.py     # SELECT 1 / PING probes
+  services/health.py         # readiness aggregation with per-check latency
+  workers/celery_app.py      # Celery app from settings (json only, no result backend), empty beat schedule
+  workers/tasks.py           # tracepilot.ping
+  integrations/ai/provider.py# InvestigationProvider Protocol placeholder (was `infrastructure/ai` in the proposal)
+migrations/                  # Alembic env (URL from settings) + 0001_baseline (empty)
+openapi/openapi.json         # exported contract (scripts/export_openapi.py, CI drift check)
+bruno/                       # Bruno API collection (OpenCollection YAML), one folder per module
+demo/sample-service/         # synthetic log emitter skeleton (dry-run only)
 ```
 
 Layer rules (enforced by review + import-linter optional): routes → services → repositories → models;
@@ -300,13 +325,14 @@ Pre-aggregated minute rollups are future work if NFR-04 targets are missed.
 
 ## 10. Local development strategy
 
-- `docker compose up -d` (server repo) runs postgres, redis, ollama, migrate, api, worker, beat; add
-  `--profile web` to build/run the client from `../tracePilot-ai-client`.
+- `docker compose up -d` (server repo) runs postgres, redis, api, worker, beat; migrations are applied explicitly
+  with `docker compose run --rm migrate`; add `--profile web` to build/run the client from
+  `../tracePilot-ai-client`. The `ollama` service is added in Phase 6 (ADR-017).
 - Host ports (all `127.0.0.1`, configurable via `.env`): API 8000, web 3100, Postgres 5433, Redis 6380. Host
   Postgres on 5432 and processes on 3000/3001 are left untouched.
 - Python 3.13 via `uv python install 3.13` + `uv sync` for running tests/tools on the host; Docker images use
-  `python:3.13-slim`. Node 24 + npm for the client.
-- First run: `docker compose exec ollama ollama pull qwen2.5:3b` (model stored in a named volume).
+  `python:3.13-slim`. Bun 1.3 (package manager/scripts) + Node 24 (Next.js runtime) for the client (ADR-004).
+- First run (from Phase 6): `docker compose exec ollama ollama pull qwen2.5:3b` (model stored in a named volume).
 - Generator: `uv run python -m tools.generator --scenario error_spike --key $TP_KEY` (P3).
 - Secrets only in untracked `.env`; `.env.example` with placeholders added in P1.
 
@@ -348,3 +374,10 @@ Checked 2026-10-17 against official registries/docs. "Latest" means latest stabl
 
 Not verified in Phase 0: exact Docker Node image tag, Ollama per-model RAM, Gemini free-tier rate limits,
 Next.js + TypeScript 7 compatibility. These are explicit P1/P6/P8 checks.
+
+**Phase 1 resolution (locked versions):** Python 3.13.14 (uv-managed), FastAPI 0.143.3, Starlette 1.8.0, Pydantic
+2.14.1, SQLAlchemy 2.1.5, Alembic 1.20.0, psycopg 3.3.6, Celery 5.6.3 / kombu 5.6.2, **redis-py 6.4.0** (kombu
+constraint), uvicorn 0.54.0; Next.js 16.4.2, React 19.3.0, **TypeScript 5.9.3** (TS 7 breaks eslint-config-next,
+ADR-016), Tailwind 4, shadcn CLI 4.22 (`base-nova` style, Base UI primitives), Vitest 5.0.5, Playwright 1.64.1,
+openapi-typescript 7.13.0. Docker images: `python:3.13-slim`, `ghcr.io/astral-sh/uv:0.11.24`,
+`oven/bun:1.3.14-slim` (web build), `node:24-slim` (web runtime), `postgres:18`, `redis:8`.

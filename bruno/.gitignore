@@ -1,0 +1,4 @@
+# Bruno dotenv secrets (referenced as {{process.env.NAME}}) — never commit
+.env
+.env.*
+!.env.example
