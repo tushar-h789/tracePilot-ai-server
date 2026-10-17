@@ -5,8 +5,10 @@ This repository contains the **FastAPI API, Celery worker/beat, Alembic migratio
 local development, a Bruno API collection and the demo sample service**. The web app lives in
 [tracePilot-ai-client](https://github.com/tushar-h789/tracePilot-ai-client).
 
-> Status: **Phase 1 — foundation** (health endpoints, settings, logging, DB/Alembic baseline, Celery skeleton,
-> Docker, CI). No authentication or business features yet. See [docs/PROGRESS.md](docs/PROGRESS.md).
+> Status: **Phase 2 — identity, access control and database foundation**: registration/login with Argon2id,
+> server-side cookie sessions + CSRF, rate limiting, organizations, memberships, RBAC (owner/admin/member/viewer),
+> audit log. Builds on Phase 1 (health, settings, logging, Alembic, Celery skeleton, Docker, CI). Projects, ingestion
+> and incidents arrive in later phases. See [docs/PROGRESS.md](docs/PROGRESS.md).
 
 ## Documentation (canonical for the whole system)
 [Project plan](docs/PROJECT_PLAN.md) · [Architecture](docs/ARCHITECTURE.md) · [Security](docs/SECURITY.md) ·
@@ -36,6 +38,8 @@ cp .env.example .env
 # The same password must appear in POSTGRES_PASSWORD / DATABASE_URL / TEST_DATABASE_URL and in
 # REDIS_PASSWORD / REDIS_URL / TEST_REDIS_URL. One-liner that does it with a random value:
 #   PW=$(python3 -c 'import secrets;print(secrets.token_urlsafe(24))'); sed -i "s/change-me-local-only/$PW/g" .env
+# Also set SECRET_KEY (signs CSRF tokens; at least 32 characters):
+#   SK=$(python3 -c 'import secrets;print(secrets.token_urlsafe(48))'); sed -i "s/^SECRET_KEY=.*/SECRET_KEY=$SK/" .env
 
 docker compose up -d --build          # postgres, redis, api, worker, beat (waits for healthy deps)
 docker compose run --rm migrate       # apply migrations (explicit, one-shot)
@@ -90,9 +94,31 @@ SKIP_DOCKER=1 ./scripts/ci-local.sh
 OpenAPI contract for the client: `uv run python -m scripts.export_openapi` writes `openapi/openapi.json`
 (commit it; CI fails if it is stale). The client regenerates its types with `bun run gen:api`.
 
+## Authentication and organizations (Phase 2)
+- Browser clients use cookies only: `POST /api/v1/auth/login` sets `tp_session` (HttpOnly) and `tp_csrf`
+  (readable). Every unsafe request — including login and register — must send `X-CSRF-Token` equal to the
+  `tp_csrf` cookie; get one first with `GET /api/v1/auth/csrf`.
+- Registration returns 202 with a generic message and does not sign in. There is no password reset in the MVP.
+- Org routes live under `/api/v1/organizations`; non-members get 404, insufficient roles get 403, the last owner
+  cannot be removed or demoted (409).
+- Design and trade-offs: [ADR-018/019/020](docs/DECISIONS.md); schema and permission matrix:
+  [ARCHITECTURE §9a–9d](docs/ARCHITECTURE.md); controls and residual risks: [SECURITY §10](docs/SECURITY.md).
+
+Quick check with curl (dev stack running):
+```bash
+J=$(mktemp -d)/jar; B=http://127.0.0.1:8000/api/v1
+curl -s -c $J -b $J $B/auth/csrf >/dev/null; T=$(awk '$6=="tp_csrf"{print $7}' $J)
+curl -s -c $J -b $J -H "X-CSRF-Token: $T" -H 'content-type: application/json' \
+  -d '{"email":"me@example.com","password":"a-long-local-passphrase","display_name":"Me"}' $B/auth/register
+curl -s -c $J -b $J -H "X-CSRF-Token: $T" -H 'content-type: application/json' \
+  -d '{"email":"me@example.com","password":"a-long-local-passphrase"}' $B/auth/login
+curl -s -b $J $B/auth/me
+```
+
 ## API collection (Bruno)
 `bruno/` is a Bruno collection (OpenCollection YAML). Open it in the Bruno app (Open Collection → `bruno/`) or run
-`cd bruno && bun x @usebruno/cli@4.2.1 run --env Local`. Conventions: [bruno/README.md](bruno/README.md).
+`cd bruno && bunx @usebruno/cli run --env Local` (folders: health, auth, organizations, organization-members,
+negative-cases). Conventions: [bruno/README.md](bruno/README.md).
 
 ## Demo sample service
 `uv run python demo/sample-service/sample_service.py --dry-run --count 5` prints synthetic log events
@@ -103,7 +129,11 @@ All settings are environment variables validated at startup (`app/core/config.py
 process with a message naming the variable (never its value). `APP_ENV=prod` additionally refuses placeholder
 credentials, `*` hosts, DEBUG logging and disables `/api/v1/docs` + `/api/v1/openapi.json`.
 Key variables: `APP_ENV`, `LOG_LEVEL`, `DATABASE_URL` (`postgresql+psycopg://…`), `REDIS_URL`, `CORS_ORIGINS`,
-`ALLOWED_HOSTS`, `AI_PROVIDER` (`ollama`), `OLLAMA_BASE_URL`, `OLLAMA_MODEL`. See `.env.example`.
+`ALLOWED_HOSTS`, `AI_PROVIDER` (`ollama`), `OLLAMA_BASE_URL`, `OLLAMA_MODEL`, and since Phase 2 `SECRET_KEY`
+(≥ 32 chars), `COOKIE_SECURE` (required `true` in prod; switches to `__Host-` cookie names),
+`SESSION_IDLE_TIMEOUT_MINUTES` / `SESSION_ABSOLUTE_TIMEOUT_HOURS`, `ARGON2_*`, `LOGIN_RATE_LIMIT_*`,
+`REGISTER_RATE_LIMIT_*`, `TRUSTED_PROXIES` (CIDRs allowed to set `X-Forwarded-For`; empty by default).
+See `.env.example`.
 
 ## Troubleshooting
 - **Port already allocated** (`Bind for 127.0.0.1:8000 failed`): something else listens there. Check with

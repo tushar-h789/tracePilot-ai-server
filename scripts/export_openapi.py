@@ -27,6 +27,7 @@ def build_schema() -> dict[str, Any]:
         app_env="dev",  # type: ignore[arg-type]
         database_url="postgresql+psycopg://openapi:openapi@localhost:5432/openapi",  # type: ignore[arg-type]
         redis_url="redis://localhost:6379/0",  # type: ignore[arg-type]
+        secret_key="openapi-export-placeholder-value-not-a-secret",  # type: ignore[arg-type]  # noqa: S106
     )
     return create_app(settings).openapi()
 

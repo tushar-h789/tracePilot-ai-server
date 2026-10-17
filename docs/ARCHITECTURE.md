@@ -274,6 +274,8 @@ in the ~8 GB available at discovery time). Final model selection is an acceptanc
 
 ## 9. Proposed database schema (PostgreSQL 18)
 
+> Phase 2 implemented the identity tables with some renames — see §9a–9d below the proposal.
+
 Conventions: `uuid` PKs (`uuidv7()` is available natively in PostgreSQL 18 — verify in P1, else generate
 UUIDv7 in Python) except `log_events` which uses `bigint generated always as identity` for compactness;
 `timestamptz` everywhere (UTC); `created_at`/`updated_at` default `now()`; FKs `ON DELETE CASCADE` only where
@@ -297,6 +299,74 @@ listed; enums as `text` + `CHECK` (easier migrations).
 
 Relationships: user ⟷ organization is many-to-many via `memberships`; organization 1—N projects; project 1—N
 ingestion keys, ingest batches, log events, rules, incidents; incident 1—N incident events and investigations.
+
+### 9a. Phase 2 implemented schema (migration `0002_identity_access`, 2026-10-17)
+
+All ids are `uuid DEFAULT uuidv7()` (native in PostgreSQL 18); all times `timestamptz`. Constraint names follow
+the SQLAlchemy naming convention (`pk_`, `fk_`, `uq_`, `ck_`, `ix_`).
+
+| Table | Columns | Constraints & indexes |
+|---|---|---|
+| `users` | `id`, `email` varchar(254) (stored NFKC-normalised, lower-cased), `password_hash` varchar(255), `display_name` varchar(100), `is_active` (default true), `created_at`, `updated_at`, `last_login_at` | `uq_users_email_lower` (unique index on `lower(email)`); `ck_users_email_lowercase` (`email = lower(email)`); `ck_users_email_length` (3–254) |
+| `sessions` | `id`, `user_id` FK→users **CASCADE**, `token_hash` char(64) (SHA-256 hex), `created_at`, `expires_at`, `last_seen_at`, `revoked_at`, `revoked_reason`, `ip_address` (≤45), `user_agent` (≤256) | `uq_sessions_token_hash`; `ck_sessions_token_hash_length` (=64); `ck_sessions_expires_after_created`; partial `ix_sessions_user_id_active ON (user_id) WHERE revoked_at IS NULL` |
+| `organizations` | `id`, `name` varchar(100), `slug` varchar(48), `created_by` FK→users **SET NULL**, `created_at`, `updated_at` | `uq_organizations_slug`; `ck_organizations_slug_format` (`^[a-z0-9][a-z0-9-]{1,46}[a-z0-9]$`); `ck_organizations_name_length` (trimmed 1–100) |
+| `organization_members` | `id`, `org_id` FK→organizations **CASCADE**, `user_id` FK→users **CASCADE**, `role` varchar(16), `created_at`, `updated_at` | `uq_organization_members_org_id_user_id`; `ck_organization_members_role_valid` (owner/admin/member/viewer); `ix_organization_members_user_id` |
+| `audit_logs` | `id`, `org_id` FK→organizations **SET NULL** (nullable for auth events), `actor_user_id` FK→users **SET NULL**, `action` varchar(64), `target_type`, `target_id`, `ip_address`, `metadata` jsonb (default `{}`), `created_at` | `ix_audit_logs_org_id_created_at (org_id, created_at DESC)`, `ix_audit_logs_actor_user_id_created_at`, `ix_audit_logs_action_created_at` |
+
+Audit actions: `auth.register`, `auth.register_duplicate`, `auth.login_succeeded`, `auth.login_failed`,
+`auth.login_rate_limited`, `auth.logout`, `auth.logout_all`, `auth.session_revoked`, `org.created`,
+`org.member_added`, `org.member_role_changed`, `org.member_removed`, `authz.permission_denied`. Audit rows never
+contain passwords, tokens or cookies; failed-login rows carry no raw email.
+
+### 9b. Permission matrix (`app/core/permissions.py`, single source of truth)
+
+| Permission | owner | admin | member | viewer |
+|---|:-:|:-:|:-:|:-:|
+| `org:read`, `members:read`, `project:read` | ✓ | ✓ | ✓ | ✓ |
+| `keys:read_metadata`, `incident:act`, `investigation:start` (Phase 3+) | ✓ | ✓ | ✓ | |
+| `org:update`, `members:manage`, `audit:read`, `project:manage`, `keys:manage`, `rules:manage` | ✓ | ✓ | | |
+| `org:delete`, `owners:manage` | ✓ | | | |
+
+Transition rules on top of the matrix (enforced in `check_can_*` and re-checked inside the locked transaction):
+admins manage admin/member/viewer only — granting the owner role, or changing/removing an owner, needs
+`owners:manage`; nobody can raise their own role; removing or demoting the last owner returns 409; the organization
+row is locked `FOR UPDATE` while members change. Denials of sensitive permissions are audited.
+
+### 9c. Request-time access pattern (reusable for projects)
+
+```text
+cookie tp_session ──► get_current_auth (session valid? user active?) ──► CurrentAuth(user, session)
+path {org_id}     ──► authorize_org(org_id, auth) ──► membership from DB ──► OrgScope(org, role)
+                        │ not a member / unknown id → 404 "Organization not found."
+require_org_permission(P) ──► role lacks P → 403 (+ audit if sensitive)
+```
+
+Phase 3 adds `authorize_project(project_id)`: load the project, then call the same `authorize_org` with the
+project's `org_id` and return a `ProjectScope(org, project, role)`; a project in another org is a 404 for the same
+reason. Repositories take the scope object, never a raw id from the request body.
+
+### 9d. Phase 2 API (`/api/v1`)
+
+| Method & path | Success | Notes |
+|---|---|---|
+| `GET /auth/csrf` | 200 | issues/refreshes `tp_csrf` |
+| `POST /auth/register` | 202 | generic body; no auto-login; 422 policy errors; 429 |
+| `POST /auth/login` | 200 | sets `tp_session` + new `tp_csrf`; generic 401; 429 + `Retry-After`; 503 if Redis down |
+| `POST /auth/logout` | 204 | revokes current session, clears cookies (idempotent) |
+| `POST /auth/logout-all` | 200 | revokes all of the user's sessions; returns count |
+| `GET /auth/me` | 200 | current user; 401 otherwise |
+| `GET /auth/sessions` | 200 | the user's active sessions (max 50), current one flagged |
+| `DELETE /auth/sessions/{session_id}` | 204 | only own sessions; others → 404 |
+| `GET /organizations` | 200 | orgs the caller belongs to, with the caller's role |
+| `POST /organizations` | 201 | caller becomes owner (atomic) |
+| `GET /organizations/{org_id}` | 200 | 404 for non-members |
+| `GET /organizations/{org_id}/members` | 200 | any member |
+| `POST /organizations/{org_id}/members` | 201 | by email of a registered user; owner/admin |
+| `PATCH /organizations/{org_id}/members/{user_id}` | 200 | role change; escalation + last-owner rules |
+| `DELETE /organizations/{org_id}/members/{user_id}` | 204 | last-owner rule |
+| `GET /organizations/{org_id}/audit-logs?limit=` | 200 | owner/admin; newest first |
+
+All unsafe methods require the CSRF header; errors are `application/problem+json`.
 
 ### Metrics computation
 Computed on read from `log_events` with bounded windows: `date_bin(bucket, ts, origin)` grouping;

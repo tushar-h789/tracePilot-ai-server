@@ -13,7 +13,7 @@ default).
 ```bash
 docker compose up -d                       # API on http://localhost:8000
 cd bruno
-bun x @usebruno/cli@4.2.1 run --env Local  # all requests, assertions and tests
+bunx @usebruno/cli run --env Local         # all requests, assertions and tests (run from bruno/)
 bun x @usebruno/cli@4.2.1 run health --env Local --reporter-json /tmp/bruno.json
 ```
 
@@ -22,11 +22,25 @@ bun x @usebruno/cli@4.2.1 run health --env Local --reporter-json /tmp/bruno.json
 bruno/
   opencollection.yml        # collection root (name, default environment)
   environments/Local.yml    # baseUrl=http://localhost:8000/api/v1 — no secrets, ever
-  health/                   # one folder per API module
+  health/                   # one folder per API module (seq 1)
     folder.yml              # folder metadata + docs
     live.yml                # GET /health/live
     ready.yml               # GET /health/ready
+  auth/                     # seq 2: csrf, register owner/member/outsider, login, me, sessions, logout, 401 after logout
+  organizations/            # seq 3: list, create (sets orgId), get, list after create
+  organization-members/     # seq 4: list, add (sets memberUserId), change role, demote last owner (409), remove, audit logs
+  negative-cases/           # seq 5: bad login 401, missing CSRF 403, cross-tenant get/add 404 as an outsider
 ```
+
+### How authentication works in the collection (Phase 2)
+- Bruno's cookie jar keeps `tp_session` / `tp_csrf` between requests (desktop app and CLI).
+- `auth/csrf` creates a per-run `runId`, so emails (`bruno-owner-{{runId}}@{{emailDomain}}`) are unique and the
+  collection can be re-run against the same database.
+- After-response scripts copy the `tp_csrf` value from `Set-Cookie` into the runtime variable `{{csrfToken}}`;
+  unsafe requests send `X-CSRF-Token: {{csrfToken}}`.
+- The run is ordered (folders by `seq`): register three users, act as the owner, then sign in as the outsider for
+  the negative cases. Run the whole collection, not a single folder, unless the variables already exist.
+- `demoPassword` in `environments/Local.yml` is a throwaway local-only passphrase for synthetic users, not a secret.
 - **One folder per backend module**, named like the router (`/api/v1/<module>`). Future folders are created
   only when the module's endpoints exist: `auth`, `organizations`, `projects`, `ingestion-keys`, `ingest`,
   `logs`, `metrics`, `incidents`, `investigations`. No empty placeholder folders.
@@ -35,8 +49,7 @@ bruno/
   (`runtime.scripts` type `tests`) for the response shape. Negative cases (401/403/404/422) live next to the
   happy path in the same folder.
 - Requests use `{{baseUrl}}`; never hard-code hosts.
-- No auth block on public endpoints (omitting `http.auth` = no auth). Authenticated modules (Phase 2) will set
-  auth at folder level and requests use `auth: inherit`.
+- No `http.auth` blocks: authentication is the session cookie held by the cookie jar (see above).
 
 ## Secrets
 Environment files are committed and must contain **no secrets**. For sensitive values use either:

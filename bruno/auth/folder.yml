@@ -1,0 +1,10 @@
+info:
+  name: auth
+  type: folder
+  seq: 2
+
+docs: |-
+  Cookie-session auth (ADR-018). Run in order: CSRF -> register (3 users) -> login -> me -> sessions ->
+  logout -> me (401) -> login again. Bruno's cookie jar stores the HttpOnly `tp_session` cookie; scripts copy
+  the readable `tp_csrf` cookie value into `{{csrfToken}}` for the `X-CSRF-Token` header (double-submit).
+  Emails use the run-unique `{{runId}}` so the collection can be re-run against the same database.
