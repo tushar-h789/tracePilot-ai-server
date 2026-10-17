@@ -67,3 +67,13 @@ class ProjectRepository:
             stmt = stmt.where(Project.id < before_id)
         stmt = stmt.order_by(Project.id.desc()).limit(limit + 1)
         return list(self.db.scalars(stmt))
+
+    def list_active(self, org_id: uuid.UUID, limit: int) -> list[Project]:
+        """Non-archived projects of an org, newest first (org dashboards)."""
+        stmt = (
+            select(Project)
+            .where(Project.org_id == org_id, Project.archived_at.is_(None))
+            .order_by(Project.id.desc())
+            .limit(limit)
+        )
+        return list(self.db.scalars(stmt).all())

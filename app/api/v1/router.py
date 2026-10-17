@@ -2,7 +2,16 @@
 
 from fastapi import APIRouter
 
-from app.api.v1.routes import auth, health, ingest, ingestion_keys, organizations, projects
+from app.api.v1.routes import (
+    auth,
+    health,
+    ingest,
+    ingestion_keys,
+    logs,
+    metrics,
+    organizations,
+    projects,
+)
 
 api_router = APIRouter()
 api_router.include_router(health.router)
@@ -11,3 +20,5 @@ api_router.include_router(organizations.router)
 api_router.include_router(projects.router)
 api_router.include_router(ingestion_keys.router)
 api_router.include_router(ingest.router)
+api_router.include_router(logs.router)
+api_router.include_router(metrics.router)

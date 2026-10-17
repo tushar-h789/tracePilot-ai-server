@@ -40,6 +40,8 @@ from app.services.auth import AuthContext, AuthService
 from app.services.health import HealthService
 from app.services.ingest import IngestContext, IngestService
 from app.services.ingestion_keys import IngestionKeyService
+from app.services.logs import LogService
+from app.services.metrics import MetricsService
 from app.services.organizations import OrganizationService, OrgScope
 from app.services.projects import ProjectScope, ProjectService
 
@@ -183,6 +185,20 @@ def get_project_service(db: DbSession, audit: AuditDep) -> ProjectService:
 
 
 ProjectServiceDep = Annotated[ProjectService, Depends(get_project_service)]
+
+
+def get_log_service(db: DbSession) -> LogService:
+    return LogService(db)
+
+
+LogServiceDep = Annotated[LogService, Depends(get_log_service)]
+
+
+def get_metrics_service(db: DbSession) -> MetricsService:
+    return MetricsService(db)
+
+
+MetricsServiceDep = Annotated[MetricsService, Depends(get_metrics_service)]
 
 
 def get_ingestion_key_service(

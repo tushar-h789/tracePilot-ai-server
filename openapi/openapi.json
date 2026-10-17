@@ -129,6 +129,24 @@
         "title": "DependencyCheck",
         "type": "object"
       },
+      "FacetValue": {
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "value": {
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "value",
+          "count"
+        ],
+        "title": "FacetValue",
+        "type": "object"
+      },
       "FieldError": {
         "properties": {
           "loc": {
@@ -444,6 +462,80 @@
         "title": "IngestionKeyRotated",
         "type": "object"
       },
+      "Latency": {
+        "properties": {
+          "min_samples": {
+            "description": "Percentiles are null below this many samples",
+            "title": "Min Samples",
+            "type": "integer"
+          },
+          "p50_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "P50 Ms"
+          },
+          "p95_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "P95 Ms"
+          },
+          "p99_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "P99 Ms"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "enum": [
+                  "no_requests",
+                  "no_latency_samples",
+                  "insufficient_samples"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Why the percentiles are null, if they are",
+            "title": "Reason"
+          },
+          "samples": {
+            "description": "Requests with a duration_ms in range",
+            "title": "Samples",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "p50_ms",
+          "p95_ms",
+          "p99_ms",
+          "samples",
+          "min_samples",
+          "reason"
+        ],
+        "title": "Latency",
+        "type": "object"
+      },
       "LivenessResponse": {
         "additionalProperties": false,
         "properties": {
@@ -455,6 +547,147 @@
           }
         },
         "title": "LivenessResponse",
+        "type": "object"
+      },
+      "LogEventDetail": {
+        "properties": {
+          "attributes": {
+            "additionalProperties": true,
+            "title": "Attributes",
+            "type": "object"
+          },
+          "duration_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Ms"
+          },
+          "environment": {
+            "title": "Environment",
+            "type": "string"
+          },
+          "event_id": {
+            "format": "uuid",
+            "title": "Event Id",
+            "type": "string"
+          },
+          "http_method": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Http Method"
+          },
+          "http_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Http Path"
+          },
+          "http_status": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Http Status"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "is_synthetic": {
+            "title": "Is Synthetic",
+            "type": "boolean"
+          },
+          "level": {
+            "enum": [
+              "debug",
+              "info",
+              "warning",
+              "error",
+              "critical"
+            ],
+            "title": "Level",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "received_at": {
+            "format": "date-time",
+            "title": "Received At",
+            "type": "string"
+          },
+          "request_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Request Id"
+          },
+          "service_name": {
+            "title": "Service Name",
+            "type": "string"
+          },
+          "timestamp": {
+            "format": "date-time",
+            "title": "Timestamp",
+            "type": "string"
+          },
+          "trace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trace Id"
+          }
+        },
+        "required": [
+          "id",
+          "event_id",
+          "timestamp",
+          "level",
+          "service_name",
+          "environment",
+          "message",
+          "trace_id",
+          "request_id",
+          "http_method",
+          "http_path",
+          "http_status",
+          "duration_ms",
+          "is_synthetic",
+          "received_at",
+          "attributes"
+        ],
+        "title": "LogEventDetail",
         "type": "object"
       },
       "LogEventIn": {
@@ -620,6 +853,225 @@
         "title": "LogEventIn",
         "type": "object"
       },
+      "LogEventSummary": {
+        "description": "A log row as listed (attributes omitted; fetch the detail endpoint for them).",
+        "properties": {
+          "duration_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Ms"
+          },
+          "environment": {
+            "title": "Environment",
+            "type": "string"
+          },
+          "event_id": {
+            "format": "uuid",
+            "title": "Event Id",
+            "type": "string"
+          },
+          "http_method": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Http Method"
+          },
+          "http_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Http Path"
+          },
+          "http_status": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Http Status"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "is_synthetic": {
+            "title": "Is Synthetic",
+            "type": "boolean"
+          },
+          "level": {
+            "enum": [
+              "debug",
+              "info",
+              "warning",
+              "error",
+              "critical"
+            ],
+            "title": "Level",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "request_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Request Id"
+          },
+          "service_name": {
+            "title": "Service Name",
+            "type": "string"
+          },
+          "timestamp": {
+            "format": "date-time",
+            "title": "Timestamp",
+            "type": "string"
+          },
+          "trace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trace Id"
+          }
+        },
+        "required": [
+          "id",
+          "event_id",
+          "timestamp",
+          "level",
+          "service_name",
+          "environment",
+          "message",
+          "trace_id",
+          "request_id",
+          "http_method",
+          "http_path",
+          "http_status",
+          "duration_ms",
+          "is_synthetic"
+        ],
+        "title": "LogEventSummary",
+        "type": "object"
+      },
+      "LogFacetsResponse": {
+        "properties": {
+          "environments": {
+            "description": "Top environments by event count (max 20)",
+            "items": {
+              "$ref": "#/components/schemas/FacetValue"
+            },
+            "title": "Environments",
+            "type": "array"
+          },
+          "levels": {
+            "items": {
+              "$ref": "#/components/schemas/FacetValue"
+            },
+            "title": "Levels",
+            "type": "array"
+          },
+          "range_from": {
+            "format": "date-time",
+            "title": "Range From",
+            "type": "string"
+          },
+          "range_to": {
+            "format": "date-time",
+            "title": "Range To",
+            "type": "string"
+          },
+          "services": {
+            "description": "Top services by event count (max 100)",
+            "items": {
+              "$ref": "#/components/schemas/FacetValue"
+            },
+            "title": "Services",
+            "type": "array"
+          }
+        },
+        "required": [
+          "range_from",
+          "range_to",
+          "levels",
+          "services",
+          "environments"
+        ],
+        "title": "LogFacetsResponse",
+        "type": "object"
+      },
+      "LogListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/LogEventSummary"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Opaque cursor for the next (older) page; null on the last page",
+            "title": "Next Cursor"
+          },
+          "range_from": {
+            "description": "Resolved inclusive start (UTC)",
+            "format": "date-time",
+            "title": "Range From",
+            "type": "string"
+          },
+          "range_to": {
+            "description": "Resolved exclusive end (UTC)",
+            "format": "date-time",
+            "title": "Range To",
+            "type": "string"
+          }
+        },
+        "required": [
+          "items",
+          "next_cursor",
+          "range_from",
+          "range_to"
+        ],
+        "title": "LogListResponse",
+        "type": "object"
+      },
       "LoginRequest": {
         "additionalProperties": false,
         "properties": {
@@ -768,6 +1220,203 @@
         "title": "MessageResponse",
         "type": "object"
       },
+      "OrgRecentError": {
+        "properties": {
+          "duration_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Ms"
+          },
+          "environment": {
+            "title": "Environment",
+            "type": "string"
+          },
+          "event_id": {
+            "format": "uuid",
+            "title": "Event Id",
+            "type": "string"
+          },
+          "http_method": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Http Method"
+          },
+          "http_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Http Path"
+          },
+          "http_status": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Http Status"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "is_synthetic": {
+            "title": "Is Synthetic",
+            "type": "boolean"
+          },
+          "level": {
+            "enum": [
+              "debug",
+              "info",
+              "warning",
+              "error",
+              "critical"
+            ],
+            "title": "Level",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "project_id": {
+            "format": "uuid",
+            "title": "Project Id",
+            "type": "string"
+          },
+          "project_name": {
+            "title": "Project Name",
+            "type": "string"
+          },
+          "request_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Request Id"
+          },
+          "service_name": {
+            "title": "Service Name",
+            "type": "string"
+          },
+          "timestamp": {
+            "format": "date-time",
+            "title": "Timestamp",
+            "type": "string"
+          },
+          "trace_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trace Id"
+          }
+        },
+        "required": [
+          "id",
+          "event_id",
+          "timestamp",
+          "level",
+          "service_name",
+          "environment",
+          "message",
+          "trace_id",
+          "request_id",
+          "http_method",
+          "http_path",
+          "http_status",
+          "duration_ms",
+          "is_synthetic",
+          "project_id",
+          "project_name"
+        ],
+        "title": "OrgRecentError",
+        "type": "object"
+      },
+      "OrgSummaryResponse": {
+        "properties": {
+          "min_samples": {
+            "title": "Min Samples",
+            "type": "integer"
+          },
+          "org_id": {
+            "format": "uuid",
+            "title": "Org Id",
+            "type": "string"
+          },
+          "project_count": {
+            "description": "Active (non-archived) projects included",
+            "title": "Project Count",
+            "type": "integer"
+          },
+          "projects": {
+            "items": {
+              "$ref": "#/components/schemas/ProjectSummary"
+            },
+            "title": "Projects",
+            "type": "array"
+          },
+          "range_from": {
+            "format": "date-time",
+            "title": "Range From",
+            "type": "string"
+          },
+          "range_to": {
+            "format": "date-time",
+            "title": "Range To",
+            "type": "string"
+          },
+          "recent_errors": {
+            "items": {
+              "$ref": "#/components/schemas/OrgRecentError"
+            },
+            "title": "Recent Errors",
+            "type": "array"
+          },
+          "totals": {
+            "$ref": "#/components/schemas/Totals"
+          }
+        },
+        "required": [
+          "org_id",
+          "range_from",
+          "range_to",
+          "project_count",
+          "totals",
+          "min_samples",
+          "projects",
+          "recent_errors"
+        ],
+        "title": "OrgSummaryResponse",
+        "type": "object"
+      },
       "OrganizationCreate": {
         "additionalProperties": false,
         "properties": {
@@ -833,6 +1482,23 @@
           "created_at"
         ],
         "title": "OrganizationOut",
+        "type": "object"
+      },
+      "OrganizationUpdate": {
+        "additionalProperties": false,
+        "description": "Rename only; the slug is a stable identifier and does not change.",
+        "properties": {
+          "name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "OrganizationUpdate",
         "type": "object"
       },
       "Problem": {
@@ -1046,6 +1712,114 @@
         "title": "ProjectOut",
         "type": "object"
       },
+      "ProjectOverviewResponse": {
+        "properties": {
+          "project_id": {
+            "format": "uuid",
+            "title": "Project Id",
+            "type": "string"
+          },
+          "range_from": {
+            "format": "date-time",
+            "title": "Range From",
+            "type": "string"
+          },
+          "range_to": {
+            "format": "date-time",
+            "title": "Range To",
+            "type": "string"
+          },
+          "totals": {
+            "$ref": "#/components/schemas/Totals"
+          }
+        },
+        "required": [
+          "project_id",
+          "range_from",
+          "range_to",
+          "totals"
+        ],
+        "title": "ProjectOverviewResponse",
+        "type": "object"
+      },
+      "ProjectSummary": {
+        "properties": {
+          "environment": {
+            "title": "Environment",
+            "type": "string"
+          },
+          "error_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Rate"
+          },
+          "errors": {
+            "title": "Errors",
+            "type": "integer"
+          },
+          "events": {
+            "title": "Events",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "p95_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "P95 Ms"
+          },
+          "project_id": {
+            "format": "uuid",
+            "title": "Project Id",
+            "type": "string"
+          },
+          "request_errors": {
+            "title": "Request Errors",
+            "type": "integer"
+          },
+          "requests": {
+            "title": "Requests",
+            "type": "integer"
+          },
+          "samples": {
+            "title": "Samples",
+            "type": "integer"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_id",
+          "name",
+          "slug",
+          "environment",
+          "events",
+          "requests",
+          "errors",
+          "request_errors",
+          "error_rate",
+          "samples",
+          "p95_ms"
+        ],
+        "title": "ProjectSummary",
+        "type": "object"
+      },
       "ProjectUpdate": {
         "additionalProperties": false,
         "description": "Partial update. `org_id`, `archived_at` etc. are not accepted (extra=forbid).",
@@ -1147,6 +1921,34 @@
         "title": "ReadinessResponse",
         "type": "object"
       },
+      "RecentErrorsResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/LogEventSummary"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "range_from": {
+            "format": "date-time",
+            "title": "Range From",
+            "type": "string"
+          },
+          "range_to": {
+            "format": "date-time",
+            "title": "Range To",
+            "type": "string"
+          }
+        },
+        "required": [
+          "range_from",
+          "range_to",
+          "items"
+        ],
+        "title": "RecentErrorsResponse",
+        "type": "object"
+      },
       "RegisterRequest": {
         "additionalProperties": false,
         "properties": {
@@ -1191,6 +1993,102 @@
         ],
         "title": "Role",
         "type": "string"
+      },
+      "ServiceSummary": {
+        "properties": {
+          "error_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Rate"
+          },
+          "errors": {
+            "title": "Errors",
+            "type": "integer"
+          },
+          "events": {
+            "title": "Events",
+            "type": "integer"
+          },
+          "p95_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "P95 Ms"
+          },
+          "request_errors": {
+            "title": "Request Errors",
+            "type": "integer"
+          },
+          "requests": {
+            "title": "Requests",
+            "type": "integer"
+          },
+          "samples": {
+            "title": "Samples",
+            "type": "integer"
+          },
+          "service_name": {
+            "title": "Service Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "service_name",
+          "events",
+          "requests",
+          "errors",
+          "request_errors",
+          "error_rate",
+          "samples",
+          "p95_ms"
+        ],
+        "title": "ServiceSummary",
+        "type": "object"
+      },
+      "ServicesResponse": {
+        "properties": {
+          "items": {
+            "description": "Top services by event count (max 50)",
+            "items": {
+              "$ref": "#/components/schemas/ServiceSummary"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "min_samples": {
+            "title": "Min Samples",
+            "type": "integer"
+          },
+          "range_from": {
+            "format": "date-time",
+            "title": "Range From",
+            "type": "string"
+          },
+          "range_to": {
+            "format": "date-time",
+            "title": "Range To",
+            "type": "string"
+          }
+        },
+        "required": [
+          "range_from",
+          "range_to",
+          "min_samples",
+          "items"
+        ],
+        "title": "ServicesResponse",
+        "type": "object"
       },
       "SessionInfo": {
         "properties": {
@@ -1286,6 +2184,162 @@
           "current"
         ],
         "title": "SessionOut",
+        "type": "object"
+      },
+      "TimeseriesPoint": {
+        "properties": {
+          "bucket_start": {
+            "format": "date-time",
+            "title": "Bucket Start",
+            "type": "string"
+          },
+          "errors": {
+            "title": "Errors",
+            "type": "integer"
+          },
+          "events": {
+            "title": "Events",
+            "type": "integer"
+          },
+          "p95_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Null when the bucket has fewer than min_samples",
+            "title": "P95 Ms"
+          },
+          "request_errors": {
+            "title": "Request Errors",
+            "type": "integer"
+          },
+          "requests": {
+            "title": "Requests",
+            "type": "integer"
+          },
+          "samples": {
+            "title": "Samples",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "bucket_start",
+          "events",
+          "requests",
+          "errors",
+          "request_errors",
+          "samples",
+          "p95_ms"
+        ],
+        "title": "TimeseriesPoint",
+        "type": "object"
+      },
+      "TimeseriesResponse": {
+        "properties": {
+          "bucket_seconds": {
+            "title": "Bucket Seconds",
+            "type": "integer"
+          },
+          "min_samples": {
+            "title": "Min Samples",
+            "type": "integer"
+          },
+          "points": {
+            "items": {
+              "$ref": "#/components/schemas/TimeseriesPoint"
+            },
+            "title": "Points",
+            "type": "array"
+          },
+          "range_from": {
+            "format": "date-time",
+            "title": "Range From",
+            "type": "string"
+          },
+          "range_to": {
+            "format": "date-time",
+            "title": "Range To",
+            "type": "string"
+          }
+        },
+        "required": [
+          "range_from",
+          "range_to",
+          "bucket_seconds",
+          "min_samples",
+          "points"
+        ],
+        "title": "TimeseriesResponse",
+        "type": "object"
+      },
+      "Totals": {
+        "properties": {
+          "error_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "request_errors / requests; null if no requests",
+            "title": "Error Rate"
+          },
+          "error_rate_reason": {
+            "anyOf": [
+              {
+                "enum": [
+                  "no_requests",
+                  "no_latency_samples",
+                  "insufficient_samples"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Rate Reason"
+          },
+          "errors": {
+            "description": "Events with level error/critical OR http_status >= 500",
+            "title": "Errors",
+            "type": "integer"
+          },
+          "events": {
+            "description": "All accepted log events in range",
+            "title": "Events",
+            "type": "integer"
+          },
+          "latency": {
+            "$ref": "#/components/schemas/Latency"
+          },
+          "request_errors": {
+            "description": "Requests that are errors (numerator of error_rate)",
+            "title": "Request Errors",
+            "type": "integer"
+          },
+          "requests": {
+            "description": "Events with an http_status",
+            "title": "Requests",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "events",
+          "requests",
+          "errors",
+          "request_errors",
+          "error_rate",
+          "error_rate_reason",
+          "latency"
+        ],
+        "title": "Totals",
         "type": "object"
       },
       "UserOut": {
@@ -2067,6 +3121,91 @@
         "tags": [
           "organizations"
         ]
+      },
+      "patch": {
+        "operationId": "update_organization_api_v1_organizations__org_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Org Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OrganizationUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrganizationOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Not authenticated (or invalid ingestion key)"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Forbidden (CSRF failure or insufficient role)"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Not found (or not visible to the caller)"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Validation failed"
+          }
+        },
+        "summary": "Rename an organization (owner/admin; the slug does not change)",
+        "tags": [
+          "organizations"
+        ]
       }
     },
     "/api/v1/organizations/{org_id}/audit-logs": {
@@ -2511,6 +3650,226 @@
         "summary": "Change a member's role",
         "tags": [
           "organizations"
+        ]
+      }
+    },
+    "/api/v1/organizations/{org_id}/metrics/summary": {
+      "get": {
+        "operationId": "org_summary_api_v1_organizations__org_id__metrics_summary_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Org Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Inclusive start (ISO 8601 with offset). Default: to - 24h",
+            "in": "query",
+            "name": "from",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Inclusive start (ISO 8601 with offset). Default: to - 24h",
+              "title": "From"
+            }
+          },
+          {
+            "description": "Exclusive end. Default: now",
+            "in": "query",
+            "name": "to",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Exclusive end. Default: now",
+              "title": "To"
+            }
+          },
+          {
+            "in": "query",
+            "name": "recent_limit",
+            "required": false,
+            "schema": {
+              "default": 10,
+              "maximum": 50,
+              "minimum": 1,
+              "title": "Recent Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrgSummaryResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Not authenticated (or invalid ingestion key)"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Not found (or not visible to the caller)"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Validation failed"
+          }
+        },
+        "summary": "Organization dashboard: totals and per-project metrics over active projects",
+        "tags": [
+          "metrics"
+        ]
+      }
+    },
+    "/api/v1/organizations/{org_id}/metrics/timeseries": {
+      "get": {
+        "operationId": "org_timeseries_api_v1_organizations__org_id__metrics_timeseries_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Org Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Inclusive start (ISO 8601 with offset). Default: to - 24h",
+            "in": "query",
+            "name": "from",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Inclusive start (ISO 8601 with offset). Default: to - 24h",
+              "title": "From"
+            }
+          },
+          {
+            "description": "Exclusive end. Default: now",
+            "in": "query",
+            "name": "to",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Exclusive end. Default: now",
+              "title": "To"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TimeseriesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Not authenticated (or invalid ingestion key)"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Not found (or not visible to the caller)"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Validation failed"
+          }
+        },
+        "summary": "Zero-filled time buckets across the organization's active projects",
+        "tags": [
+          "metrics"
         ]
       }
     },
@@ -3354,6 +4713,870 @@
         "summary": "Rotate: issue a replacement key; the old one is revoked now or after a grace period",
         "tags": [
           "ingestion-keys"
+        ]
+      }
+    },
+    "/api/v1/projects/{project_id}/logs": {
+      "get": {
+        "operationId": "list_logs_api_v1_projects__project_id__logs_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Inclusive start (ISO 8601 with offset). Default: to - 24h",
+            "in": "query",
+            "name": "from",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Inclusive start (ISO 8601 with offset). Default: to - 24h",
+              "title": "From"
+            }
+          },
+          {
+            "description": "Exclusive end. Default: now",
+            "in": "query",
+            "name": "to",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Exclusive end. Default: now",
+              "title": "To"
+            }
+          },
+          {
+            "in": "query",
+            "name": "level",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "enum": [
+                      "debug",
+                      "info",
+                      "warning",
+                      "error",
+                      "critical"
+                    ],
+                    "type": "string"
+                  },
+                  "maxItems": 5,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Level"
+            }
+          },
+          {
+            "in": "query",
+            "name": "service_name",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "maxLength": 100,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "maxItems": 20,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Service Name"
+            }
+          },
+          {
+            "in": "query",
+            "name": "environment",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 32,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Environment"
+            }
+          },
+          {
+            "in": "query",
+            "name": "trace_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 64,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Trace Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "request_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 128,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Request Id"
+            }
+          },
+          {
+            "description": "Full-text search on message (prefix match per word)",
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Full-text search on message (prefix match per word)",
+              "title": "Q"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 300,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LogListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Not authenticated (or invalid ingestion key)"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Not found (or not visible to the caller)"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Validation failed"
+          }
+        },
+        "summary": "Search and list log events (newest first, keyset pagination)",
+        "tags": [
+          "logs"
+        ]
+      }
+    },
+    "/api/v1/projects/{project_id}/logs/facets": {
+      "get": {
+        "operationId": "log_facets_api_v1_projects__project_id__logs_facets_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Inclusive start (ISO 8601 with offset). Default: to - 24h",
+            "in": "query",
+            "name": "from",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Inclusive start (ISO 8601 with offset). Default: to - 24h",
+              "title": "From"
+            }
+          },
+          {
+            "description": "Exclusive end. Default: now",
+            "in": "query",
+            "name": "to",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Exclusive end. Default: now",
+              "title": "To"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LogFacetsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Not authenticated (or invalid ingestion key)"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Not found (or not visible to the caller)"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Validation failed"
+          }
+        },
+        "summary": "Levels, services and environments present in the range (with counts)",
+        "tags": [
+          "logs"
+        ]
+      }
+    },
+    "/api/v1/projects/{project_id}/logs/{log_id}": {
+      "get": {
+        "operationId": "get_log_api_v1_projects__project_id__logs__log_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "log_id",
+            "required": true,
+            "schema": {
+              "maximum": 9223372036854775807,
+              "minimum": 1,
+              "title": "Log Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LogEventDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Not authenticated (or invalid ingestion key)"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Not found (or not visible to the caller)"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Validation failed"
+          }
+        },
+        "summary": "One log event with its attributes",
+        "tags": [
+          "logs"
+        ]
+      }
+    },
+    "/api/v1/projects/{project_id}/metrics/overview": {
+      "get": {
+        "operationId": "project_overview_api_v1_projects__project_id__metrics_overview_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Inclusive start (ISO 8601 with offset). Default: to - 24h",
+            "in": "query",
+            "name": "from",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Inclusive start (ISO 8601 with offset). Default: to - 24h",
+              "title": "From"
+            }
+          },
+          {
+            "description": "Exclusive end. Default: now",
+            "in": "query",
+            "name": "to",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Exclusive end. Default: now",
+              "title": "To"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectOverviewResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Not authenticated (or invalid ingestion key)"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Not found (or not visible to the caller)"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Validation failed"
+          }
+        },
+        "summary": "Totals, error rate and latency percentiles for a project",
+        "tags": [
+          "metrics"
+        ]
+      }
+    },
+    "/api/v1/projects/{project_id}/metrics/recent-errors": {
+      "get": {
+        "operationId": "project_recent_errors_api_v1_projects__project_id__metrics_recent_errors_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Inclusive start (ISO 8601 with offset). Default: to - 24h",
+            "in": "query",
+            "name": "from",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Inclusive start (ISO 8601 with offset). Default: to - 24h",
+              "title": "From"
+            }
+          },
+          {
+            "description": "Exclusive end. Default: now",
+            "in": "query",
+            "name": "to",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Exclusive end. Default: now",
+              "title": "To"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 10,
+              "maximum": 50,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecentErrorsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Not authenticated (or invalid ingestion key)"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Not found (or not visible to the caller)"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Validation failed"
+          }
+        },
+        "summary": "Most recent error events (level error/critical or HTTP 5xx)",
+        "tags": [
+          "metrics"
+        ]
+      }
+    },
+    "/api/v1/projects/{project_id}/metrics/services": {
+      "get": {
+        "operationId": "project_services_api_v1_projects__project_id__metrics_services_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Inclusive start (ISO 8601 with offset). Default: to - 24h",
+            "in": "query",
+            "name": "from",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Inclusive start (ISO 8601 with offset). Default: to - 24h",
+              "title": "From"
+            }
+          },
+          {
+            "description": "Exclusive end. Default: now",
+            "in": "query",
+            "name": "to",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Exclusive end. Default: now",
+              "title": "To"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServicesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Not authenticated (or invalid ingestion key)"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Not found (or not visible to the caller)"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Validation failed"
+          }
+        },
+        "summary": "Per-service requests, errors, error rate and p95",
+        "tags": [
+          "metrics"
+        ]
+      }
+    },
+    "/api/v1/projects/{project_id}/metrics/timeseries": {
+      "get": {
+        "operationId": "project_timeseries_api_v1_projects__project_id__metrics_timeseries_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Inclusive start (ISO 8601 with offset). Default: to - 24h",
+            "in": "query",
+            "name": "from",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Inclusive start (ISO 8601 with offset). Default: to - 24h",
+              "title": "From"
+            }
+          },
+          {
+            "description": "Exclusive end. Default: now",
+            "in": "query",
+            "name": "to",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Exclusive end. Default: now",
+              "title": "To"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TimeseriesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Not authenticated (or invalid ingestion key)"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Not found (or not visible to the caller)"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Validation failed"
+          }
+        },
+        "summary": "Zero-filled time buckets of events, requests, errors and p95",
+        "tags": [
+          "metrics"
         ]
       }
     },
