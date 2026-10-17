@@ -1,0 +1,68 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+.eggs/
+build/
+dist/
+pip-wheel-metadata/
+
+# Virtual environments / tooling
+.venv/
+venv/
+/env/
+.python-version.local
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.hypothesis/
+.tox/
+.nox/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.pyre/
+.pytype/
+
+# Environment files (keep only the example)
+.env
+.env.*
+!.env.example
+*.local
+
+# Secrets / keys
+*.pem
+*.key
+/secrets/
+
+# Logs and local data
+*.log
+/logs/
+*.sqlite
+*.sqlite3
+*.db
+/pgdata/
+/redisdata/
+/data/
+celerybeat-schedule*
+celerybeat.pid
+
+# Model artifacts (Ollama models live in a Docker volume). Root-anchored so app/models etc. are NOT ignored
+/models/
+/ollama/
+*.gguf
+*.safetensors
+*.bin
+
+# Generated
+openapi.json.tmp
+
+# Editors / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
