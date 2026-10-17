@@ -3,3 +3,5 @@
 fdc6d8b791e77b83a2ec1760853146f8eebb5058:demo/sample-service/tests/test_scenarios.py:generic-api-key:180
 fdc6d8b791e77b83a2ec1760853146f8eebb5058:demo/sample-service/tests/test_scenarios.py:generic-api-key:222
 0fe36d2d23910acca08179c720753e09be234e7a:packages/python-sdk/tests/test_client.py:generic-api-key:28
+# docs/PROGRESS.md quoted one of those fake fixtures in the Phase 3 report; reworded in the next commit.
+70c4fa4fd4d275811786c564268bfc0755f95919:docs/PROGRESS.md:generic-api-key:257

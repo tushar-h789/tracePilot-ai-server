@@ -254,7 +254,7 @@ Every row has `is_synthetic=true` and `environment='demo'`.
 
 ### CI incident
 The first push (`2dcbb08`) failed the gitleaks job. The `generic-api-key` rule matched three obviously fake
-fixtures (`key = "tp_0123456789ab_" + "K" * 43`). The fix commit (`156e3b7`):
+fixtures (a literal `tp_` prefix with a 12-hex id, concatenated with `"K" * 43`). The fix commit (`156e3b7`):
 - builds the fixtures from pieces so the rule no longer matches;
 - adds `.gitleaksignore` entries for the three historical fingerprints (history is not rewritten);
 - adds the same gitleaks scan to `scripts/ci-local.sh`.
