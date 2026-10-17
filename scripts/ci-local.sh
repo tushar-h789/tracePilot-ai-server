@@ -37,6 +37,17 @@ step "pip-audit"
 req="$(mktemp)"; trap 'rm -f "$req"' EXIT
 uv export --frozen --format requirements-txt --no-emit-project --all-groups -o "$req" >/dev/null
 uv run pip-audit --strict --disable-pip -r "$req"
+for pkg in packages/python-sdk demo/sample-service; do
+  step "$pkg: sync, ruff, format, mypy, pytest"
+  (
+    cd "$pkg"
+    uv sync --frozen
+    uv run ruff check .
+    uv run ruff format --check .
+    uv run mypy
+    uv run pytest --cov --cov-report=term-missing -q
+  )
+done
 if [[ "${SKIP_DOCKER:-0}" != "1" ]]; then
   step "docker build"
   docker build -q -t tracepilot-server:ci . >/dev/null && echo "image built: tracepilot-server:ci"
