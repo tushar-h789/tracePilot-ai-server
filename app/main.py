@@ -16,6 +16,7 @@ from redis import Redis
 from app.api.v1.router import api_router
 from app.core.config import Settings, get_settings
 from app.core.logging import configure_logging
+from app.core.passwords import PasswordService
 from app.core.security import install_exception_handlers, install_http_middleware
 from app.db.session import build_engine, build_sessionmaker
 
@@ -53,6 +54,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.engine = engine
     app.state.session_factory = build_sessionmaker(engine)
     app.state.redis = redis_client
+    app.state.passwords = PasswordService(settings)
 
     # Order: last added runs first. Host check -> CORS -> request context/security headers.
     install_http_middleware(app, settings)
