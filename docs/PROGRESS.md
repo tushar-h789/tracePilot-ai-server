@@ -133,3 +133,66 @@ Client results are recorded in the client repo's `docs/PROGRESS.md`.
 Users/sessions/refresh rotation, Argon2id, cookies + CSRF double-submit, login rate limiting, orgs/memberships,
 RBAC dependencies, Bruno `auth/` and `organizations/` folders, client login/register pages wired to the API via
 the Next.js `/api/v1` proxy.
+
+## Phase 2 — Identity, access control and database foundation (2026-10-17)
+
+Branch `phase-2/identity-access` (stacked on `phase-1/foundation`; the PR targets `phase-1/foundation` and will be
+retargeted to `main` after the Phase 1 PR merges). Same branch name in the client repo.
+
+### Delivered (server)
+- **Schema** (migration `0002_identity_access`): `users`, `sessions`, `organizations`, `organization_members`,
+  `audit_logs` with check constraints, FKs and indexes (ARCHITECTURE §9a).
+- **Auth**: register (202, generic), login, logout, logout-all, me, session list/revoke; Argon2id with explicit
+  parameters and rehash on login; opaque hashed session tokens with idle + absolute expiry (ADR-018); signed,
+  session-bound CSRF double-submit + Origin check; Redis rate limits per email/IP with 429 + `Retry-After`,
+  failing closed (ADR-019); password policy 12–128 + common-password list; dummy-hash timing for unknown emails.
+- **Organizations**: create (atomic, creator = owner), list, get, members list/add/change role/remove, audit log;
+  RBAC matrix in `app/core/permissions.py` (viewer kept, ADR-020); 404 for non-members, 403 for insufficient role,
+  last-owner 409, no self-escalation, admins cannot touch owners; org row locked during member changes.
+- **Reusable access pattern** for Phase 3 projects: `authorize_org` / `require_org_permission` dependencies.
+- **Audit events** for auth, membership changes and sensitive denials; log redaction extended (csrf, credential,
+  password_hash) with a test that captures a whole auth flow.
+- **OpenAPI** regenerated; drift check in tests and CI. **Bruno**: `auth`, `organizations`,
+  `organization-members`, `negative-cases` folders.
+- Compose/CI: `SECRET_KEY` required by the api service; `COOKIE_SECURE`, `TRUSTED_PROXIES` passed through.
+
+### Delivered (client) — see the client repo's PROGRESS.md
+Login/register (React Hook Form + Zod), cookie-only API client with automatic CSRF header, same-origin `/api/v1`
+proxy, server-side auth check in the app layout, logout, organization list/create, members page with role-based
+controls, loading/empty/error states, regenerated API types, Playwright E2E against the real API.
+
+### Verification results (executed on the dev machine, 2026-10-17, Asia/Dhaka)
+| Check | Result |
+|---|---|
+| `scripts/ci-local.sh` (ruff, ruff format, mypy, bandit, pytest+coverage, alembic up/down, OpenAPI drift, pip-audit, docker build) | all passed; peak 214 MB in a 2 GiB scope |
+| pytest | 182 passed (106 unit + 76 integration), coverage 97.86 % |
+| mypy / ruff / bandit | 0 issues in 76 source files / clean / 0 findings |
+| Alembic | `upgrade head`, `downgrade base`, `upgrade head`, `alembic check` (no drift) — dev DB at `0002_identity_access` |
+| pip-audit | no known vulnerabilities |
+| hadolint (server + client Dockerfiles) | clean |
+| Bruno CLI (`bunx @usebruno/cli run --env Local`) | 28/28 requests, 32/32 tests, 32/32 assertions passed |
+| Client lint / typecheck / format / Vitest | clean / clean / clean / 59 passed, 85.5 % statements |
+| Client `check:api` | `schema.d.ts` matches `openapi/openapi.json` |
+| Client `bun audit --audit-level=high` | exit 0 (one triaged dev-only advisory ignored, as in Phase 1) |
+| Client production build (1 worker) | passed, peak ≈ 0.56 GB |
+| Playwright E2E vs real API | 5/5 passed (peak 615 MB incl. Next server + Chromium) |
+| Web container (`docker compose --profile web build web`) + proxy smoke | built; register 202 → login 200 → me 200 through the container; anonymous `/orgs` → 307 `/login?next=%2Forgs` |
+| gitleaks (full history, both repos) | see the PR description / final report |
+
+Memory rule: the machine already sat at ≈ 19.9 GB used of the 20.8 GB cap from other workloads, so heavy steps
+ran one at a time in `systemd-run --user --scope -p MemoryMax=… -p MemorySwapMax=0`; the client build was
+limited to one worker; worker/beat containers were stopped during testing. Highest system-wide "used" observed
+during any step: 20.8 GB (web image build, within the cap).
+
+### Known limitations
+- No password reset, email verification or MFA (documented out of scope); no invitations — members are added by
+  the email of an existing account (admins can therefore learn whether an email is registered, ADR-019).
+- Members cannot leave an organization themselves; org rename/delete endpoints are not exposed yet (permissions
+  exist in the matrix).
+- Per-IP rate limits see the Next.js proxy's address for browser traffic (proxy not in `TRUSTED_PROXIES`).
+- GitHub Actions results for this branch: see the PR checks.
+
+### Next (Phase 3 — projects and ingestion keys)
+`projects` table + `authorize_project` on top of `authorize_org`, project CRUD, hashed ingestion keys, Bruno
+`projects/` and `ingestion-keys/` folders, client project pages.
+

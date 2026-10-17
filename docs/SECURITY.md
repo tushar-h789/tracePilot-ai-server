@@ -57,6 +57,9 @@ See ARCHITECTURE.md §7: (1) Internet ↔ web/API, (2) API ↔ data plane (Postg
 ## 5. Controls by area
 
 ### Authentication and sessions
+> Phase 2 superseded the access/refresh cookie design below with one opaque server-side session (ADR-018); see §10
+> for what is implemented. The bullets in this subsection are the Phase 0 plan, kept for history.
+
 - Argon2id via `argon2-cffi` (library-default or OWASP-recommended parameters, tuned in P2 to ~≤ 250 ms on the
   dev laptop); rehash on login when parameters change. Password policy: min 12 chars, max 128, check against a
   small local common-password list (no external API).
@@ -167,3 +170,45 @@ group, ingestion abuse tests, AI injection/evidence tests, pip-audit, npm audit,
 Accepted for Phase 1: Redis password visible in the redis container's process list (`--requirepass`); the
 Next.js app has no Content-Security-Policy yet (nonce-based CSP planned for P7); one triaged dev-only advisory in
 the client (`braces`, GHSA-vfj7-8cjw-p6xm, no patched version exists) is ignored in `bun audit`.
+
+## 10. Phase 2 — identity and access controls implemented and tested (2026-10-17)
+
+| Control | Where | Test / evidence |
+|---|---|---|
+| Argon2id, explicit params (t=3, m=64 MiB, p=4); prod refuses m < 19 MiB; rehash on login when params change | `app/core/passwords.py`, config | `test_password_hash_is_argon2id_and_never_returned`, `test_login_rehashes_when_parameters_change`, unit tests |
+| Password policy 12–128 chars, local common-password list, not equal to email; policy errors never echo the password | `app/core/passwords.py`, `app/core/data/common_passwords.txt` | unit tests, `test_registration_policy_errors_do_not_echo_password` |
+| Opaque 256-bit session token, HttpOnly + SameSite=Lax + Path=/ (+ Secure, `__Host-` prefix in prod); only SHA-256 stored | `app/core/identity.py`, `app/api/cookies.py`, `app/services/auth.py` | `test_session_token_is_stored_hashed`; Playwright `context.cookies()` asserts `httpOnly` |
+| Absolute (24 h) and idle (60 min) expiry checked server-side on every request; revoked sessions rejected | `AuthService.authenticate` | `test_absolute_expiry_rejects_session`, `test_idle_timeout_rejects_session`, `test_revoked_session_is_rejected` |
+| Logout / logout-all / revoke one session are server-side revocations; old cookie gets 401 | `app/api/v1/routes/auth.py` | `test_logout_invalidates_token_server_side`, `test_logout_all_revokes_every_session`, Bruno `me-after-logout`, Playwright |
+| Session fixation: login revokes the presented session and issues a new token | `AuthService.login` | `test_login_replaces_presented_session` |
+| CSRF signed double-submit (session-bound HMAC) on every unsafe auth/org route incl. login/register; Origin allowlist | `app/core/csrf.py`, `app/api/deps.py::require_csrf` | `test_csrf_*`, `test_pre_login_csrf_token_is_not_valid_after_login`, `test_foreign_origin_is_rejected`, Bruno `missing-csrf` |
+| Generic login failure (401 "Invalid email or password.") + dummy Argon2 verify for unknown emails; inactive users identical | `AuthService._login_failed` | `test_invalid_credentials_are_generic`, `test_inactive_user_cannot_login`, Bruno `bad-login` |
+| Duplicate registration: same 202 body, password still hashed, no second account, audited | `AuthService.register` | `test_duplicate_registration_is_generic_and_creates_no_account` |
+| Rate limits (Redis): login 5/60 s per email, 20/60 s per IP; register 20/600 s per IP; 429 + `Retry-After`; fail closed (503) | `app/core/rate_limit.py` | `test_login_rate_limit_per_email`, `test_login_rate_limit_per_ip`, `test_register_rate_limit_per_ip`, `test_redis_down_fails_closed` |
+| `X-Forwarded-For` honoured only from `TRUSTED_PROXIES` (empty by default) | `app/core/net.py` | unit tests |
+| Tenant isolation: non-members get 404 on every org route (same as unknown id); scope comes only from the path + DB membership | `app/api/deps.py::authorize_org` | `test_cross_tenant_access_returns_404`, `test_owner_of_other_org_cannot_touch_members_via_own_org`, Bruno `negative-cases/cross-tenant-*`, frontend shows "not found" |
+| RBAC matrix in one module; in-org insufficient role → 403; full role × action matrices tested | `app/core/permissions.py` | `test_add_member_matrix`, `test_change_role_matrix`, `test_remove_member_matrix`, unit matrix tests |
+| Privilege escalation: admins cannot grant/modify/remove owners; nobody raises their own role; last owner → 409; org row locked during changes | `app/core/permissions.py`, `OrganizationService` | `test_last_owner_is_protected`, matrices, Bruno `demote-last-owner` |
+| Mass assignment: `extra="forbid"` on every request schema | `app/schemas/common.py` | `test_create_org_rejects_mass_assignment_and_blank` |
+| Audit log for auth events, member changes and sensitive denials (no secrets in metadata); readable by owner/admin only | `app/services/audit.py` | `test_audit_log_access_and_contents`, `test_role_change_audit_records_transition`, `test_service_level_denial_is_audited_without_lock_wait` |
+| Transactions: org + owner membership created atomically; failures roll back fully | `OrganizationService.create`, `app/db/session.py` | `test_org_create_is_atomic`, `test_service_rollback_leaves_no_partial_rows` |
+| Log redaction covers password, token, cookie, csrf, credential, password_hash keys; full auth flow logs contain no secret | `app/core/logging.py` | `test_redact_covers_auth_material`, `test_auth_flow_logs_contain_no_secrets` |
+| Validation errors never echo the submitted input; `Cache-Control: no-store` on API responses | `app/core/security.py` | `test_schema_validation_errors_do_not_echo_input`, header tests |
+| Browser: no tokens in localStorage/sessionStorage; session cookie unreadable by JS; same-origin proxy; server-side auth check before rendering app pages | client `src/lib/api/browser.ts`, `src/app/api/v1/[...path]/route.ts`, `src/app/(app)/layout.tsx` | Playwright `e2e/auth.spec.ts`, client unit tests |
+
+### Phase 2 residual risks (accepted)
+- No password reset, email verification or MFA (no outbound email in the MVP). A user who forgets their password
+  needs an operator to reset the hash manually.
+- Owners/admins can learn whether an email is registered via "add member" (ADR-019); that endpoint has no
+  dedicated rate limit yet.
+- Per-IP limits see the Next.js proxy's IP for browser traffic unless the proxy is added to `TRUSTED_PROXIES`
+  and forwards `X-Forwarded-For` (not done locally). Per-email limits still apply. A per-email limit can be used to
+  lock a victim out of login for up to 60 s at a time (accepted; no permanent lockout exists).
+- Fixed-window limiter allows a burst of up to 2× the limit across a window boundary.
+- Sessions are not bound to IP/User-Agent (stored for display only), so a stolen cookie works until expiry or
+  revocation; mitigated by HttpOnly, SameSite=Lax, 60-min idle timeout and the sessions list with revoke.
+- Members cannot leave an organization themselves (removal needs `members:manage`); an owner/admin must remove
+  them.
+- The frontend's `src/proxy.ts` check is UX only (cookie presence); every authorization decision is made by the API.
+- `localStorage` holds one non-secret value: the last selected organization id (`tp:last-org-id`, FR-07).
+

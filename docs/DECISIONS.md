@@ -70,7 +70,9 @@ Date for all Phase 0 ADRs: 2026-10-17.
   (GitHub's ubuntu runners ship Node). `bun audit` replaces `npm audit` (NFR-13).
 
 ## ADR-005 — Cookie-based sessions: short-lived access token + rotating refresh session + CSRF double-submit
-- **Status**: Accepted.
+- **Status**: Superseded by ADR-018 (Phase 2, 2026-10-17). The CSRF double-submit, Origin check and same-origin
+  proxy parts carry over unchanged; the JWT access token + rotating refresh token were replaced by one opaque,
+  server-side session.
 - **Context**: Browser app; requirement for HttpOnly cookies, revocable sessions, CSRF protection.
 - **Decision**: Access token (signed JWT, ~15 min) in `tp_access` HttpOnly cookie; opaque refresh token in
   `tp_refresh` HttpOnly cookie scoped to `/api/v1/auth`, stored hashed in `sessions`, rotated on every use with
@@ -174,3 +176,84 @@ Date for all Phase 0 ADRs: 2026-10-17.
   `cap_drop: ALL`, `no-new-privileges`.
 - **Consequences**: Anyone with a shell on the dev machine can reach the DB/Redis ports (with the password from
   `.env`); acceptable for local development, documented in README.
+
+## ADR-018 — Opaque server-side sessions in an HttpOnly cookie (supersedes ADR-005's JWT + refresh design)
+- **Status**: Accepted (Phase 2, 2026-10-17).
+- **Context**: Phase 0 planned a 15-minute JWT access cookie plus a rotating refresh cookie with reuse detection.
+  For a single API instance with Postgres already on every request path, that design costs two token types,
+  rotation races and a revocation gap of up to 15 minutes, while buying a DB lookup we do not need to avoid.
+- **Decision**:
+  - Login issues a 256-bit random token (`secrets.token_urlsafe(32)`) in cookie `tp_session`
+    (`__Host-tp_session` when `COOKIE_SECURE=true`): HttpOnly, SameSite=Lax, Path=/, Secure in prod,
+    Max-Age = absolute lifetime.
+  - Only `sha256(token)` is stored (`sessions.token_hash`, unique). A DB leak does not yield usable cookies;
+    SHA-256 (not Argon2) is fine because the token has 256 bits of entropy.
+  - Every authenticated request loads the session and the user: rejected if revoked, past `expires_at`
+    (absolute, 24 h default), idle for longer than 60 min (default), or the user is inactive. `last_seen_at` is
+    written at most once per 60 s to keep writes low.
+  - Login revokes any session the browser presented (session fixation defence) and always issues a new token.
+    Logout revokes the current session; logout-all revokes every session of the user; a single session can be
+    revoked from the sessions list.
+  - Passwords: Argon2id via `argon2-cffi` with explicit parameters (t=3, m=64 MiB, p=4, 32-byte hash, 16-byte
+    salt — above the OWASP minimum of m=19 MiB/t=2); hashes are upgraded on successful login when the parameters
+    change (`needs_rehash`). Production refuses `ARGON2_MEMORY_COST_KIB < 19456`.
+  - Registration never logs in automatically and always answers 202 with the same body (see ADR-019).
+  - Password reset, email verification and MFA are out of scope for the MVP (no outbound email exists).
+- **Trade-offs**: + immediate, real revocation; + one token type, no rotation races, nothing to decode
+  client-side; + simple to test. − one indexed lookup per request (≈ sub-millisecond on the dev box) and a write
+  per minute per active session; − horizontal scaling needs the shared DB (already true). Revisit if the API is
+  ever served from multiple regions.
+
+## ADR-019 — Tenant-isolation responses, account enumeration stance and rate limiting
+- **Status**: Accepted (Phase 2, 2026-10-17).
+- **404 vs 403**: a caller who is not a member of an organization gets **404 "Organization not found."** for every
+  org-scoped route — identical to a random UUID — so org ids cannot be probed. A member whose role lacks the
+  permission gets **403** (they already know the org exists; a clear 403 is better UX and easier to audit).
+  Membership is always resolved from the DB from the session's user id; no endpoint takes the scope from the body.
+  Projects (Phase 3) reuse the same dependency (`authorize_org`) and the same rule.
+- **Enumeration stance**:
+  - Login failures are one generic 401 "Invalid email or password." for unknown email, wrong password and
+    inactive account; unknown emails verify against a dummy Argon2 hash so timing is comparable.
+  - Registration always returns 202 with one fixed message ("Registration received. If this email address was
+    not already registered, your account is ready and you can sign in.") — duplicates still
+    hash the password (same timing) and are recorded as `auth.register_duplicate` in the audit log. The user is
+    never signed in by registration, so a 202 reveals nothing.
+  - Accepted leak: an org owner/admin adding a member by email learns whether that email has an account
+    (404 "No registered user with that email address." vs 201). This is limited to authenticated owners/admins acting inside
+    their own org and successful adds are audited; it is not separately rate limited (follow-up). Invitations by email would remove it but
+    need outbound email (out of scope).
+- **Rate limiting** (Redis, fixed window: `INCR` + `EXPIRE … NX`, remaining TTL returned as `Retry-After`):
+  - login per email (`rl:login:email:<sha256(email)>`) 5 / 60 s; login per IP 20 / 60 s;
+    register per IP 20 / 600 s. All configurable via `LOGIN_*` / `REGISTER_*` settings.
+  - Keys hash the email/IP so Redis never holds raw PII. Limits apply before password verification, so a
+    rate-limited attempt costs no Argon2 work. Responses: 429 problem+json + `Retry-After`; audited as
+    `auth.login_rate_limited`.
+  - Fails **closed**: if Redis is unavailable, login/register return 503 rather than allowing unlimited guessing.
+  - The client IP is the socket peer unless the peer is in `TRUSTED_PROXIES` (empty by default), in which case the
+    right-most untrusted `X-Forwarded-For` hop is used. The Next.js proxy does not forward XFF today, so all
+    browser traffic shares the proxy's IP bucket locally — acceptable for a local demo; documented in SECURITY.md.
+  - Trade-off: a fixed window allows up to 2× the limit across a window boundary; a sliding window or token
+    bucket is unnecessary at these limits.
+- **Last owner / escalation**: owners can do everything; admins manage admin/member/viewer but cannot grant,
+  modify or remove an owner; nobody can raise their own role; removing or demoting the last owner → 409. Member
+  changes lock the organization row (`SELECT … FOR UPDATE`) so two concurrent demotions cannot leave zero owners.
+
+## ADR-020 — Phase 2 naming, roles and build adjustments
+- **Status**: Accepted (Phase 2, 2026-10-17).
+- **Roles**: all four Phase 0 roles are kept — owner, admin, member, **viewer** (read-only). The viewer role costs
+  one matrix row and is what PROJECT_PLAN §5 specifies for stakeholders; dropping it later would need a data
+  migration. The matrix lives in one place: `app/core/permissions.py` (see ARCHITECTURE.md §9a).
+- **Naming**: Phase 0 names were changed for consistency with the plural-table convention:
+  `memberships` → `organization_members`, `audit_log` → `audit_logs` (now required, not optional), and the API
+  prefix `/orgs` → `/organizations`. `sessions` holds server-side sessions (ADR-018) instead of refresh sessions.
+  Audit metadata column is `metadata` (jsonb); the ORM attribute is `details` because `metadata` is reserved by
+  SQLAlchemy.
+- **CSRF on login/register**: the double-submit check also applies to login and register (login CSRF defence);
+  the client fetches `GET /auth/csrf` first. The token is `nonce.HMAC(SECRET_KEY, "csrf|binding|nonce")` where
+  `binding` is `sha256(session cookie)` or `anon`, so a token minted for one session is useless for another.
+- **Same-origin proxy**: the Next.js route handler `src/app/api/v1/[...path]/route.ts` forwards browser calls to
+  `API_BASE_URL` at request time (header allowlists, 1 MiB body cap, 15 s timeout, `Set-Cookie` passthrough), so
+  cookies are first-party and the API needs no credentialed CORS for the browser.
+- **Low-RAM builds**: `next.config.ts` honours `NEXT_BUILD_CPUS` (worker count) and `NEXT_SKIP_TYPECHECK=1`
+  (typecheck runs separately via `bun run typecheck`). The default 15 workers peaked above 1.3 GB; one worker
+  peaks at ≈ 0.56 GB. The client Dockerfile sets both.
