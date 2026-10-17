@@ -1,0 +1,139 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main, "phase-*/**"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  UV_FROZEN: "1"
+  PYTHON_VERSION: "3.13"
+
+jobs:
+  lint-type:
+    name: Lint, format, types, SAST
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          version: "0.11.24"
+          python-version: ${{ env.PYTHON_VERSION }}
+      - run: uv sync
+      - run: uv run ruff check --output-format=github .
+      - run: uv run ruff format --check .
+      - run: uv run mypy
+      - run: uv run bandit -q -c pyproject.toml -r app
+
+  test:
+    name: Tests (Postgres 18 + Redis 8)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: tracepilot
+          POSTGRES_PASSWORD: ci-only-not-a-secret
+          POSTGRES_DB: tracepilot_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U tracepilot -d tracepilot_test"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+      redis:
+        image: redis:8
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+    env:
+      TP_REQUIRE_INTEGRATION: "1"
+      TEST_DATABASE_URL: postgresql+psycopg://tracepilot:ci-only-not-a-secret@127.0.0.1:5432/tracepilot_test
+      TEST_REDIS_URL: redis://127.0.0.1:6379/15
+      DATABASE_URL: postgresql+psycopg://tracepilot:ci-only-not-a-secret@127.0.0.1:5432/tracepilot_test
+      REDIS_URL: redis://127.0.0.1:6379/0
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          version: "0.11.24"
+          python-version: ${{ env.PYTHON_VERSION }}
+      - run: uv sync
+      - name: pytest (unit + integration) with coverage
+        run: uv run pytest --cov --cov-report=term-missing --cov-report=xml
+      - name: Alembic upgrade / downgrade / drift check
+        run: |
+          uv run alembic upgrade head
+          uv run alembic current
+          uv run alembic downgrade base
+          uv run alembic upgrade head
+          uv run alembic check
+
+  contract:
+    name: OpenAPI drift + dependency audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          version: "0.11.24"
+          python-version: ${{ env.PYTHON_VERSION }}
+      - run: uv sync
+      - name: OpenAPI export is committed and up to date
+        run: uv run python -m scripts.export_openapi --check
+      - name: pip-audit (locked dependencies)
+        run: |
+          uv export --format requirements-txt --no-emit-project --all-groups -o /tmp/requirements.txt
+          uv run pip-audit --strict --disable-pip -r /tmp/requirements.txt
+
+  docker:
+    name: Docker build + Dockerfile lint + secret scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: hadolint
+        run: docker run --rm -i hadolint/hadolint:v2.15.1 < Dockerfile
+      - name: gitleaks (full history)
+        run: docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.30.1 git /repo --redact --no-banner
+      - name: Build image
+        run: docker build -t tracepilot-server:ci .
+      - name: Image runs as non-root
+        run: test "$(docker run --rm --entrypoint id tracepilot-server:ci -u)" != "0"
+
+  py314:
+    name: Python 3.14 early warning (non-blocking)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          version: "0.11.24"
+      - name: Unit tests on 3.14 with the locked dependency set
+        run: |
+          uv export --format requirements-txt --no-emit-project --all-groups -o /tmp/requirements.txt
+          uv venv --python 3.14 /tmp/venv314
+          VIRTUAL_ENV=/tmp/venv314 uv pip install -r /tmp/requirements.txt
+          /tmp/venv314/bin/python -m pytest -m "not integration"
