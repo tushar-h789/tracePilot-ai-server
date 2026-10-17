@@ -97,16 +97,49 @@ def test_prod_refuses_placeholder_credentials(make_settings: SettingsFactory) ->
         {"allowed_hosts": "*"},
         {"celery_task_always_eager": True},
         {"log_level": "DEBUG"},
+        {"cookie_secure": False},
+        {"argon2_memory_cost_kib": 1024},
+        {"secret_key": "change-me-please-change-me-please-0123456789"},
     ],
 )
 def test_prod_refuses_insecure_options(
     make_settings: SettingsFactory, overrides: dict[str, object]
 ) -> None:
+    values: dict[str, object] = {**PROD_OK, **overrides}
     with pytest.raises(ValidationError):
-        make_settings(app_env="prod", **overrides)
+        make_settings(app_env="prod", **values)
+
+
+PROD_OK: dict[str, object] = {
+    "allowed_hosts": "api.tracepilot.test",
+    "cookie_secure": True,
+    "argon2_memory_cost_kib": 65536,
+}
 
 
 def test_prod_with_real_values_disables_docs(make_settings: SettingsFactory) -> None:
-    settings = make_settings(app_env="prod", allowed_hosts="api.tracepilot.test")
+    settings = make_settings(app_env="prod", **PROD_OK)
     assert settings.is_prod
     assert settings.docs_enabled is False
+    assert settings.session_cookie_name == "__Host-tp_session"
+    assert settings.csrf_cookie_name == "__Host-tp_csrf"
+
+
+def test_dev_cookie_names_have_no_host_prefix(make_settings: SettingsFactory) -> None:
+    settings = make_settings()
+    assert settings.session_cookie_name == "tp_session"
+    assert settings.csrf_cookie_name == "tp_csrf"
+
+
+def test_secret_key_is_required_and_long(make_settings: SettingsFactory) -> None:
+    with pytest.raises(ValidationError):
+        make_settings(secret_key="short")
+
+
+def test_trusted_proxies_are_validated(make_settings: SettingsFactory) -> None:
+    assert make_settings(trusted_proxies="10.0.0.0/8, 127.0.0.1").trusted_proxies == [
+        "10.0.0.0/8",
+        "127.0.0.1",
+    ]
+    with pytest.raises(ValidationError):
+        make_settings(trusted_proxies="not-an-ip")

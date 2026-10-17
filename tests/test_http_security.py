@@ -25,7 +25,14 @@ def test_cors_allows_configured_origin_only(client: TestClient) -> None:
 
 
 def test_unhandled_errors_hide_internals(make_settings: SettingsFactory) -> None:
-    app = create_app(make_settings(app_env="prod", allowed_hosts="localhost"))
+    app = create_app(
+        make_settings(
+            app_env="prod",
+            allowed_hosts="localhost",
+            cookie_secure=True,
+            argon2_memory_cost_kib=19456,
+        )
+    )
 
     @app.get("/boom")
     def boom() -> None:
@@ -44,7 +51,14 @@ def test_unhandled_errors_hide_internals(make_settings: SettingsFactory) -> None
 
 
 def test_docs_and_openapi_disabled_in_prod(make_settings: SettingsFactory) -> None:
-    app = create_app(make_settings(app_env="prod", allowed_hosts="localhost"))
+    app = create_app(
+        make_settings(
+            app_env="prod",
+            allowed_hosts="localhost",
+            cookie_secure=True,
+            argon2_memory_cost_kib=19456,
+        )
+    )
     with TestClient(app, base_url="http://localhost") as client:
         assert client.get("/api/v1/openapi.json").status_code == 404
         assert client.get("/api/v1/docs").status_code == 404
