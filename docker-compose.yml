@@ -1,0 +1,141 @@
+# TracePilot AI — local development stack.
+#
+#   cp .env.example .env            # then edit the change-me values
+#   docker compose up -d            # postgres, redis, api, worker, beat
+#   docker compose run --rm migrate # apply Alembic migrations (explicit, one-shot)
+#   docker compose --profile web up -d --build web   # optional: Next.js client from ../tracePilot-ai-client
+#
+# Every published port is bound to 127.0.0.1 only. Ollama is NOT part of Phase 1 (added in Phase 6).
+
+name: tracepilot
+
+x-app: &app
+  build:
+    context: .
+    dockerfile: Dockerfile
+  image: tracepilot-server:dev
+  restart: unless-stopped
+  init: true
+  read_only: true
+  tmpfs:
+    - /tmp
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  environment: &app-env
+    APP_ENV: ${APP_ENV:-dev}
+    LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:?set POSTGRES_USER in .env}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:?set POSTGRES_DB in .env}
+    REDIS_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}@redis:6379/0
+    CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3100,http://127.0.0.1:3100}
+    ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1,api}
+    AI_PROVIDER: ${AI_PROVIDER:-ollama}
+    OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
+    OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:3b}
+  depends_on: &app-deps
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+
+services:
+  postgres:
+    image: postgres:18
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:?set POSTGRES_DB in .env}
+    # Postgres 18 images moved the volume to /var/lib/postgresql (PGDATA=/var/lib/postgresql/18/docker).
+    volumes:
+      - pgdata:/var/lib/postgresql
+      - ./docker/postgres/initdb:/docker-entrypoint-initdb.d:ro
+    # Localhost-only, non-default port (host Postgres already uses 5432) for host-run alembic/pytest.
+    ports:
+      - "127.0.0.1:${POSTGRES_HOST_PORT:-5433}:5432"
+    shm_size: 128mb
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+  redis:
+    image: redis:8
+    restart: unless-stopped
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}
+      REDISCLI_AUTH: ${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}
+    # Broker only: no persistence, bounded memory, never evict queued tasks.
+    command:
+      - sh
+      - -c
+      - exec redis-server --requirepass "$$REDIS_PASSWORD" --save "" --appendonly no --maxmemory 128mb --maxmemory-policy noeviction
+    ports:
+      - "127.0.0.1:${REDIS_HOST_PORT:-6380}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    <<: *app
+    ports:
+      - "127.0.0.1:${API_PORT:-8000}:8000"
+
+  worker:
+    <<: *app
+    command: ["celery", "-A", "app.workers.celery_app", "worker", "--loglevel=INFO", "--concurrency=1", "--hostname=worker@%h"]
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A app.workers.celery_app inspect ping -d worker@$$HOSTNAME --timeout 5 >/dev/null"]
+      interval: 30s
+      timeout: 15s
+      retries: 3
+      start_period: 20s
+
+  beat:
+    <<: *app
+    command: ["celery", "-A", "app.workers.celery_app", "beat", "--loglevel=INFO", "--schedule=/tmp/celerybeat-schedule", "--pidfile=/tmp/celerybeat.pid"]
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /tmp/celerybeat.pid && kill -0 \"$$(cat /tmp/celerybeat.pid)\""]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  migrate:
+    <<: *app
+    profiles: ["migrate"]
+    restart: "no"
+    command: ["alembic", "upgrade", "head"]
+    healthcheck:
+      disable: true
+
+  web:
+    profiles: ["web"]
+    build:
+      context: ../tracePilot-ai-client
+      dockerfile: Dockerfile
+    image: tracepilot-web:dev
+    restart: unless-stopped
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    environment:
+      API_BASE_URL: http://api:8000/api/v1
+    ports:
+      - "127.0.0.1:${WEB_PORT:-3100}:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  pgdata:
