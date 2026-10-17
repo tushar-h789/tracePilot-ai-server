@@ -61,3 +61,75 @@ Ollama per-model resident RAM and latency (P6) · Gemini free-tier rate limits (
 3. Client: `create-next-app` (TS strict, App Router, Tailwind v4), shadcn init, Vitest/RTL, Playwright, OpenAPI type
    generation script, CI workflow.
 4. P1 acceptance: `docker compose up` healthy, CI green in both repos.
+
+---
+
+## Phase 1 — Repository setup & development foundation
+
+- **Date**: 2026-10-17 (Asia/Dhaka, UTC+6)
+- **Status**: Complete locally — all checks green on the dev machine; GitHub Actions not yet observed (first run
+  happens on push).
+- **Branch**: `phase-1/foundation` (both repos, created from `phase-0/discovery`). `main` does not exist on the
+  remotes; no PR opened (see "Decisions needed").
+- **Scope**: foundation only — no authentication, tenancy or business features.
+
+### Delivered (server)
+- uv project: `pyproject.toml`, `uv.lock`, `.python-version` (3.13; uv-managed CPython 3.13.14).
+- App skeleton (`app/`): factory, settings, JSON logging, security middleware, DB session/Base, health
+  schemas/repository/service/routes, Celery app + `tracepilot.ping` + empty beat schedule, AI provider Protocol
+  placeholder. Layout in ARCHITECTURE.md §4 ("Phase 1 implemented layout").
+- Endpoints: `GET /api/v1/health/live`, `GET /api/v1/health/ready` (200 / 503, per-check status + latency).
+- Alembic with settings-driven URL; empty baseline `0001_baseline`.
+- `Dockerfile` (multi-stage, uv, python:3.13-slim, non-root uid 10001, healthcheck), `docker-compose.yml`
+  (postgres:18, redis:8, api, worker, beat, `migrate` profile, `web` profile), `.env.example`.
+- `openapi/openapi.json` + `scripts/export_openapi.py` (`--check` for drift); `scripts/ci-local.sh`.
+- `.github/workflows/ci.yml`: lint-type, test (Postgres 18 + Redis 8 services, alembic up/down/check),
+  contract (OpenAPI drift + pip-audit), docker (hadolint, gitleaks, build, non-root check), py314 (non-blocking).
+- `bruno/` collection (OpenCollection YAML) with `health/live` + `health/ready`.
+- `demo/sample-service/` dry-run synthetic log emitter.
+- Docs: README (setup/ports/migrations/troubleshooting), ADR-004 revised (Bun), ADR-014 accepted, ADR-016/017
+  added, ARCHITECTURE/TESTING/SECURITY Phase 1 sections.
+
+### Verification results (actually executed on the dev machine)
+| Check | Result |
+|---|---|
+| `docker compose up -d` | postgres, redis, api, worker, beat → all `healthy` |
+| `docker compose run --rm migrate` | `Running upgrade -> 0001_baseline` |
+| `alembic current` / `history` (container and host) | `0001_baseline (head)` |
+| `curl /health/live` | 200 `{"status":"ok"}` |
+| `curl /health/ready` | 200 `{"status":"ok","checks":{"database":{"status":"ok",…},"redis":{"status":"ok",…}}}` |
+| `docker compose stop redis` → ready | **503** `{"status":"unavailable", … "redis":{"status":"error"}}`; live still 200 |
+| `docker compose start redis` → ready | 200 again; worker reconnected automatically |
+| Celery `celery call tracepilot.ping` | worker log: `Task tracepilot.ping[…] succeeded … 'pong'` |
+| ruff check / ruff format --check | pass / 54 files formatted |
+| mypy (strict, pydantic plugin) | `Success: no issues found in 45 source files` |
+| bandit -r app | 0 issues (549 LOC) |
+| pytest (unit + integration, real PG18/Redis8) | **46 passed**, coverage **97.93 %** (gate 80 %); 1 warning (Starlette TestClient → httpx2 deprecation) |
+| alembic upgrade → downgrade base → upgrade → check (test DB) | pass; `No new upgrade operations detected` |
+| OpenAPI drift | up to date |
+| pip-audit (all groups, hashed export) | `No known vulnerabilities found` |
+| hadolint (both Dockerfiles) | clean |
+| gitleaks (working tree) | only `.env` (untracked, gitignored, real local password) flagged — expected |
+| Server image | `tracepilot-server:dev` 339 MB |
+| Web image via `docker compose --profile web build web` | built in 109 s, 415 MB; container healthy, uid 1000, `/overview` showed "All systems ready" via `http://api:8000` |
+| Bruno CLI 4.2.1 `run --env Local` | 2/2 requests, 4/4 tests, 4/4 assertions — PASS |
+| RAM (docker stats) | api 69 MB, worker 63 MB, beat 46 MB, postgres 56 MB, redis 6 MB, web 60 MB |
+
+Client results are recorded in the client repo's `docs/PROGRESS.md`.
+
+### Known limitations / follow-ups
+- GitHub Actions workflows were validated by running the same steps locally only.
+- redis-py pinned at 6.4.0 by kombu; TypeScript at 5.9 (ADR-016).
+- Postgres/Redis host ports are published to loopback for host tooling (ADR-017).
+- No CSP on the web app yet (P7); Redis password visible in container process list.
+- `ollama` service intentionally absent until Phase 6.
+
+### Decisions needed from the user
+- `main` does not exist on either remote (default branch is `phase-0/discovery`). Decide whether to create
+  `main` from `phase-0/discovery` (or from `phase-1/foundation` after review) and make it the default branch;
+  then open PRs `phase-1/foundation → main` in both repos.
+
+### Next (Phase 2 — auth, orgs, RBAC)
+Users/sessions/refresh rotation, Argon2id, cookies + CSRF double-submit, login rate limiting, orgs/memberships,
+RBAC dependencies, Bruno `auth/` and `organizations/` folders, client login/register pages wired to the API via
+the Next.js `/api/v1` proxy.

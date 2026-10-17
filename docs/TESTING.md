@@ -82,14 +82,14 @@
 | Lint/format | ruff (incl. `S` bandit-derived rules), ruff format | ESLint (Next.js config), Prettier |
 | Types | mypy (strict on `app/services`, `app/schemas`, `app/infrastructure/ai`) | `tsc --noEmit` (strict) |
 | SAST-lite | bandit | eslint-plugin-security (optional) |
-| Dependencies | `pip-audit` (on exported uv lock) | `npm audit --audit-level=high` |
+| Dependencies | `pip-audit` (on exported uv lock) | `bun audit --audit-level=high` (triaged ignores documented) |
 | Secrets | gitleaks (GitHub Action or CLI; free for public repos/personal use — verify licence terms in P1) | same |
 | Containers | Hadolint for Dockerfiles; optional Trivy image scan (free, OSS) | — |
 
 ## 7. CI matrix (GitHub Actions, least privilege)
 
 All workflows: `permissions: contents: read`; triggers on `pull_request` and `push` to `main` and `phase-*`
-branches; concurrency cancels superseded runs; caches for uv/npm.
+branches; concurrency cancels superseded runs; caches for uv/bun.
 
 **Server repo**
 | Job | Runs on | Details |
@@ -104,11 +104,11 @@ branches; concurrency cancels superseded runs; caches for uv/npm.
 **Client repo**
 | Job | Details |
 |---|---|
-| `lint-type` | Node 24: `npm ci`, eslint, `tsc --noEmit` |
+| `lint-type` | Bun 1.3: `bun install --frozen-lockfile`, eslint, `tsc --noEmit` |
 | `test` | Vitest + RTL with coverage |
 | `build` | `next build` |
 | `contract` | fetch server `openapi.json` (from server repo default branch raw file or artifact), regenerate types, `git diff --exit-code` |
-| `audit` | `npm audit --audit-level=high`, gitleaks |
+| `audit` | `bun audit --audit-level=high`, gitleaks |
 
 Ollama is **not** run in CI (CPU time, model download); the fake provider covers CI.
 
@@ -129,3 +129,40 @@ Coverage is a floor, not a goal; security tests are required regardless of perce
   tests (seeded RNG for determinism).
 - No real customer data, ever. Fixtures with "secrets" use obviously fake values (e.g. `FAKE-NOT-A-SECRET-0000`) and are
   allowlisted in gitleaks config.
+
+## 10. Phase 1 implementation status (2026-10-17)
+
+### How to run (server)
+```bash
+docker compose up -d postgres redis          # integration tests need real services
+./scripts/ci-local.sh                        # exactly the CI steps (reads TEST_* URLs from .env)
+uv run pytest -m "not integration"           # unit tests only, no services
+```
+Integration tests are marked `@pytest.mark.integration` and use `TEST_DATABASE_URL` (database name must end in
+`_test`; created automatically on first Postgres start by `docker/postgres/initdb/10-create-test-db.sh`) and
+`TEST_REDIS_URL` (DB 15). Without those variables they are skipped, unless `TP_REQUIRE_INTEGRATION=1` (CI and
+ci-local) which turns a skip into a failure.
+
+### Server tests in Phase 1 (46 tests: 41 unit + 5 integration)
+| File | What it proves |
+|---|---|
+| `test_config.py` | valid defaults; CSV env parsing; invalid env/URL/origin/provider values fail fast; error text names the variable but never echoes the value; secrets masked in repr; prod refuses placeholder credentials, `*` hosts, eager Celery, DEBUG logs; docs disabled in prod |
+| `test_health.py` | live 200 without dependencies; security headers + request id; readiness 503 with per-check `error` and no internal details when Postgres/Redis are unreachable; **integration**: 200 with real Postgres+Redis; 503 when only Redis is down |
+| `test_http_security.py` | untrusted Host → 400; CORS allowlist; unhandled exception → generic problem+json without message/class name; OpenAPI/docs 404 in prod, served in dev |
+| `test_logging.py` | JSON log fields; request id; sensitive keys redacted (nested) |
+| `test_celery.py` | `ping` task eager → `pong`; JSON-only serializer (no pickle), empty beat schedule |
+| `test_migrations.py` | single head; **integration**: upgrade head → downgrade base → upgrade head against the test DB |
+| `test_db_session.py` | **integration**: `get_db` yields a working session |
+| `test_openapi_contract.py` | committed `openapi/openapi.json` equals the app's schema |
+| `test_ai_provider_protocol.py`, `test_demo_sample_service.py` | Protocol is structural; demo dry-run emits valid events |
+
+### Client tests in Phase 1
+Vitest + RTL (`tests/unit`): API client (success, http error with status/body, accepted 503, network, timeout,
+invalid JSON, invalid `API_BASE_URL`), base URL config, `getSystemStatus` state mapping, system status widget
+(ok/degraded/unreachable/skeleton), app shell (nav links, `aria-current`, skip link, mobile trigger), route error
+boundary (no raw error text). Playwright smoke (`e2e/smoke.spec.ts`): login renders, `/` → `/overview` in the app
+shell with a real status state, 404 page.
+
+### Bruno
+`bruno/` collection (OpenCollection YAML) with assertions + tests per request; run headlessly with
+`cd bruno && bun x @usebruno/cli@4.2.1 run --env Local` against a running API (see `bruno/README.md`).

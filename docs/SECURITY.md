@@ -144,3 +144,26 @@ group, ingestion abuse tests, AI injection/evidence tests, pip-audit, npm audit,
   manager); "Secure" cookies are enabled only in prod mode behind HTTPS.
 - Gemini free tier (if enabled in P8) may use submitted content to improve Google products; hence synthetic data only.
 - Dependency vulnerabilities discovered after release until the next audit run.
+
+## 9. Phase 1 — controls implemented and tested (2026-10-17)
+
+| Control | Where | Test / evidence |
+|---|---|---|
+| Fail-fast settings validation; errors name the variable, never the value; secrets as `SecretStr` | `app/core/config.py` | `test_config.py` |
+| Prod guard: refuses `change-me` credentials, `*` hosts, eager Celery, DEBUG; disables docs/OpenAPI | `app/core/config.py`, `app/main.py` | `test_config.py`, `test_http_security.py` |
+| TrustedHostMiddleware (allowlist) | `app/main.py` | untrusted Host → 400 |
+| CORS allowlist, no wildcard (validator rejects `*`) | `app/main.py`, config | preflight tests |
+| Security headers (nosniff, DENY framing, CSP `default-src 'none'` on JSON, Referrer-Policy, COOP, Permissions-Policy, HSTS in prod) | `app/core/security.py`, client `next.config.ts` | header assertions (pytest, Bruno, curl) |
+| Generic problem+json 500s; details only in server logs | `app/core/security.py` | `test_unhandled_errors_hide_internals` |
+| Readiness reports only `ok`/`error` per dependency (no exception text/hosts) | `app/services/health.py` | `test_ready_returns_503_when_dependencies_unreachable` |
+| JSON logs with request id; key-based redaction; no query strings/bodies/headers logged; uvicorn access log disabled in favour of the app's request log | `app/core/logging.py` | `test_logging.py` |
+| Celery JSON-only serialization (no pickle), no result backend | `app/workers/celery_app.py` | `test_celery.py` |
+| Containers: non-root (uid 10001 / node 1000), read-only rootfs, tmpfs `/tmp`, `cap_drop: ALL`, `no-new-privileges`, healthchecks | `Dockerfile`, `docker-compose.yml`, client `Dockerfile` | `docker compose ps` healthy; `id` in container; CI non-root check |
+| All host ports bound to 127.0.0.1; Redis `requirepass`; Postgres password auth (scram) | `docker-compose.yml` | `docker compose ps` port column |
+| Secrets only in untracked `.env`; `.env.example` placeholders | `.gitignore`, `.env.example` | `git ls-files`, gitleaks |
+| CI least privilege (`permissions: contents: read`, `persist-credentials: false`, SHA-pinned actions); gitleaks, hadolint, bandit, pip-audit, `bun audit` | `.github/workflows/ci.yml` (both repos) | local runs recorded in PROGRESS.md |
+| Client never renders error messages from server errors; `react/no-danger` lint rule | client `route-error.tsx`, `eslint.config.mjs` | `route-error.test.tsx` |
+
+Accepted for Phase 1: Redis password visible in the redis container's process list (`--requirepass`); the
+Next.js app has no Content-Security-Policy yet (nonce-based CSP planned for P7); one triaged dev-only advisory in
+the client (`braces`, GHSA-vfj7-8cjw-p6xm, no patched version exists) is ignored in `bun audit`.

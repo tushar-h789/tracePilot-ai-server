@@ -40,12 +40,34 @@ Date for all Phase 0 ADRs: 2026-10-17.
   host, `python:3.13-slim` in Docker, 3.13 in CI. Add a non-blocking 3.14 CI job as an early warning.
 - **Consequences**: Officially supported combination for the core task queue; revisit when Celery lists 3.14.
 
-## ADR-004 — uv for Python, npm for the web app
-- **Status**: Accepted.
-- **Context**: uv 0.11.24 installed, no pip3; Node 24 + npm 11 installed, no pnpm; bun 1.3 available.
-- **Decision**: uv (project, lockfile `uv.lock`, Python management). npm with `package-lock.json` for the client
-  (default, best compatibility with Next.js/Playwright/CI; bun not used to avoid toolchain surprises).
-- **Consequences**: Reproducible installs via `uv sync --frozen` and `npm ci`.
+## ADR-004 — uv for Python, Bun for the web app (revised in Phase 1)
+- **Status**: Accepted (revised 2026-10-17, Phase 1 — user rule change: "use Bun instead of Node/npm wherever
+  possible"). Supersedes the Phase 0 decision "npm with `package-lock.json`".
+- **Context**: uv 0.11.24, Bun 1.3.14 and Node 24.18 are installed. Next.js 16.4 documents Node.js as its
+  supported runtime; Bun can run most Node tooling.
+- **Decision**:
+  - Python: uv (project, `uv.lock`, Python management) — unchanged.
+  - Web app: **Bun is the package manager and script runner** (`bun install --frozen-lockfile`, lockfile
+    `bun.lock`, `bun run <script>`, `bun x` for one-off CLIs, `bun audit`), CI uses `oven-sh/setup-bun`, the
+    Docker build stages use `oven/bun:1.3.14-slim`.
+  - Runtimes, as **verified on the dev machine in Phase 1**:
+    | Task | Command | Runtime actually used | Result |
+    |---|---|---|---|
+    | install | `bun install --frozen-lockfile` | Bun | ✅ |
+    | dev / build | `bun run dev` / `bun run build` (`next build`) | Node 24 (the `next` bin has a `node` shebang) | ✅ |
+    | build on Bun | `bun --bun next build` | Bun | ✅ works for this app (not the default) |
+    | production server | `node .next/standalone/server.js` | Node 24 (Docker `node:24-slim`) | ✅ |
+    | production server on Bun | `bun .next/standalone/server.js` | Bun | ✅ smoke-tested (login 200, overview rendered) |
+    | unit tests | `bun run test` (Vitest 5) | Node | ✅ |
+    | unit tests on Bun | `bun --bun x vitest run` | Bun | ❌ worker termination errors (`stream.readableEnded`) |
+    | E2E | `bun run test:e2e` (Playwright 1.64) | Node | ✅ |
+    | lint / types | `bun run lint`, `bun run typecheck` | Node | ✅ |
+    | Docker build stage | `bun run build` inside `oven/bun` | Bun (`node` is a shim to Bun in that image) | ✅ |
+  - Default: keep Node as the runtime for Next.js server, Vitest and Playwright (supported/working); Bun for
+    everything package-management related. The Bun runtime may be adopted for the server later after more
+    testing.
+- **Consequences**: One fast toolchain for installs/scripts; Node remains required on dev machines/CI runners
+  (GitHub's ubuntu runners ship Node). `bun audit` replaces `npm audit` (NFR-13).
 
 ## ADR-005 — Cookie-based sessions: short-lived access token + rotating refresh session + CSRF double-submit
 - **Status**: Accepted.
@@ -114,7 +136,7 @@ Date for all Phase 0 ADRs: 2026-10-17.
 - **Consequences**: Simple, free, reproducible; production deployment is out of scope.
 
 ## ADR-014 — Synchronous SQLAlchemy sessions
-- **Status**: Proposed (confirm in P1).
+- **Status**: Accepted (confirmed in P1: `app/db/session.py`, readiness check, Alembic all sync).
 - **Decision**: Use sync SQLAlchemy 2.x + psycopg 3 in both API (FastAPI runs sync endpoints in a threadpool) and
   Celery tasks, sharing repositories.
 - **Consequences**: Less complexity, one code path; async can be adopted later per endpoint if profiling demands.
@@ -124,3 +146,31 @@ Date for all Phase 0 ADRs: 2026-10-17.
 - **Context**: Host Postgres on 127.0.0.1:5432; host ports 3000 and 3001 in use.
 - **Decision**: Defaults API `127.0.0.1:8000`, web `127.0.0.1:3100`, Postgres `127.0.0.1:5433`, Redis
   `127.0.0.1:6380`, Ollama not published; all overridable via `.env`.
+
+## ADR-016 — Phase 1 dependency and tooling pins (2026-10-17)
+- **Status**: Accepted.
+- **Decisions / findings**:
+  - **redis-py 6.4.0, not 8.x**: `celery[redis]` 5.6.3 → kombu 5.6.2 constrains `redis` below 6.5, so uv resolved
+    6.4.0. Revisit when kombu widens the range.
+  - **TypeScript 5.9.3, not 7.0**: verified in P1 — with TS 7.0.2 `tsc --noEmit` passes and Next.js 16.4 can
+    type-check via the TS CLI, but `eslint-config-next` (typescript-eslint, peer range `<6.1`) fails to load
+    because TS 7 ships no JavaScript compiler API. Pinned `typescript@~5.9.3`; revisit when typescript-eslint
+    supports TS 7.
+  - **Postgres 18 volume path**: the official image declares `VOLUME /var/lib/postgresql` (PGDATA
+    `/var/lib/postgresql/18/docker`); compose mounts the named volume there (Docker Hub docs).
+  - **No web fonts**: system font stacks instead of `next/font/google`, so builds work offline and no
+    third-party font request is made.
+  - **Starlette 1.8 TestClient** emits a `StarletteDeprecationWarning` recommending `httpx2`; kept httpx 0.28 for
+    now (warning only).
+  - GitHub Actions pinned to **commit SHAs** with version comments.
+
+## ADR-017 — Compose: localhost-published Postgres/Redis, explicit migrations, Ollama deferred
+- **Status**: Accepted.
+- **Decision**: Postgres (`127.0.0.1:5433`) and Redis (`127.0.0.1:6380`, `requirepass`) are published **to the
+  loopback interface only** by default because host-run tools (pytest integration tests, `uv run alembic`,
+  `scripts/ci-local.sh`) need them; they are password-protected and on non-default ports (ADR-015). Migrations
+  are never run implicitly: `docker compose run --rm migrate` (service in the `migrate` profile). The `ollama`
+  service is **not** added until Phase 6 (memory; AI not used yet). App containers run read-only, non-root,
+  `cap_drop: ALL`, `no-new-privileges`.
+- **Consequences**: Anyone with a shell on the dev machine can reach the DB/Redis ports (with the password from
+  `.env`); acceptable for local development, documented in README.
