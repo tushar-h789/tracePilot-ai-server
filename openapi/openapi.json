@@ -181,6 +181,269 @@
         "title": "HTTPValidationError",
         "type": "object"
       },
+      "IngestBatch": {
+        "additionalProperties": false,
+        "properties": {
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/LogEventIn"
+            },
+            "maxItems": 1000,
+            "minItems": 1,
+            "title": "Events",
+            "type": "array"
+          }
+        },
+        "required": [
+          "events"
+        ],
+        "title": "IngestBatch",
+        "type": "object"
+      },
+      "IngestResult": {
+        "properties": {
+          "accepted": {
+            "description": "Newly stored events",
+            "title": "Accepted",
+            "type": "integer"
+          },
+          "duplicates": {
+            "description": "Events whose event_id was already stored for the project",
+            "title": "Duplicates",
+            "type": "integer"
+          },
+          "received": {
+            "description": "Events in the request",
+            "title": "Received",
+            "type": "integer"
+          },
+          "rejected": {
+            "description": "Always 0 on success: any invalid event rejects the whole batch with 422",
+            "title": "Rejected",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "received",
+          "accepted",
+          "duplicates",
+          "rejected"
+        ],
+        "title": "IngestResult",
+        "type": "object"
+      },
+      "IngestionKeyCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "IngestionKeyCreate",
+        "type": "object"
+      },
+      "IngestionKeyCreated": {
+        "properties": {
+          "key": {
+            "$ref": "#/components/schemas/IngestionKeyOut"
+          },
+          "secret": {
+            "description": "The full ingestion key. Shown exactly once; only a hash is stored.",
+            "title": "Secret",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "secret"
+        ],
+        "title": "IngestionKeyCreated",
+        "type": "object"
+      },
+      "IngestionKeyListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/IngestionKeyOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "title": "IngestionKeyListResponse",
+        "type": "object"
+      },
+      "IngestionKeyOut": {
+        "description": "Key metadata. The secret is never part of this model.",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "created_by": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "last_used_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Used At"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "prefix": {
+            "description": "Public, non-secret identifier (tp_<12 hex>)",
+            "title": "Prefix",
+            "type": "string"
+          },
+          "project_id": {
+            "format": "uuid",
+            "title": "Project Id",
+            "type": "string"
+          },
+          "replaced_by_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Replaced By Id"
+          },
+          "revoked_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revoked At"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "expired",
+              "revoked"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "name",
+          "prefix",
+          "status",
+          "created_by",
+          "created_at",
+          "last_used_at",
+          "expires_at",
+          "revoked_at",
+          "replaced_by_id"
+        ],
+        "title": "IngestionKeyOut",
+        "type": "object"
+      },
+      "IngestionKeyRotate": {
+        "additionalProperties": false,
+        "properties": {
+          "grace_seconds": {
+            "default": 0,
+            "description": "How long the old key keeps working (0 = revoked immediately). Capped by KEY_ROTATION_MAX_GRACE_SECONDS (default 86400).",
+            "maximum": 604800.0,
+            "minimum": 0.0,
+            "title": "Grace Seconds",
+            "type": "integer"
+          }
+        },
+        "title": "IngestionKeyRotate",
+        "type": "object"
+      },
+      "IngestionKeyRotated": {
+        "properties": {
+          "key": {
+            "$ref": "#/components/schemas/IngestionKeyOut"
+          },
+          "previous_key": {
+            "$ref": "#/components/schemas/IngestionKeyOut"
+          },
+          "secret": {
+            "description": "The full ingestion key. Shown exactly once; only a hash is stored.",
+            "title": "Secret",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "secret",
+          "previous_key"
+        ],
+        "title": "IngestionKeyRotated",
+        "type": "object"
+      },
       "LivenessResponse": {
         "additionalProperties": false,
         "properties": {
@@ -192,6 +455,169 @@
           }
         },
         "title": "LivenessResponse",
+        "type": "object"
+      },
+      "LogEventIn": {
+        "additionalProperties": false,
+        "properties": {
+          "attributes": {
+            "additionalProperties": true,
+            "description": "JSON object: depth ≤ 5, ≤ 128 keys, ≤ 16384 bytes serialized. Sensitive-looking keys are redacted.",
+            "title": "Attributes",
+            "type": "object"
+          },
+          "duration_ms": {
+            "anyOf": [
+              {
+                "maximum": 86400000,
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Duration Ms"
+          },
+          "environment": {
+            "anyOf": [
+              {
+                "maxLength": 32,
+                "minLength": 1,
+                "pattern": "^[a-z0-9][a-z0-9_-]{0,31}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Defaults to the project's environment",
+            "title": "Environment"
+          },
+          "event_id": {
+            "description": "Client-generated UUID; the idempotency key per project",
+            "format": "uuid",
+            "title": "Event Id",
+            "type": "string"
+          },
+          "http_method": {
+            "anyOf": [
+              {
+                "enum": [
+                  "GET",
+                  "HEAD",
+                  "POST",
+                  "PUT",
+                  "PATCH",
+                  "DELETE",
+                  "OPTIONS"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Http Method"
+          },
+          "http_path": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Http Path"
+          },
+          "http_status": {
+            "anyOf": [
+              {
+                "maximum": 599,
+                "minimum": 100,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Http Status"
+          },
+          "level": {
+            "enum": [
+              "debug",
+              "info",
+              "warning",
+              "error",
+              "critical"
+            ],
+            "title": "Level",
+            "type": "string"
+          },
+          "message": {
+            "maxLength": 8192,
+            "minLength": 1,
+            "title": "Message",
+            "type": "string"
+          },
+          "request_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "pattern": "^[A-Za-z0-9._:-]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Request Id"
+          },
+          "service_name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9._:/-]+$",
+            "title": "Service Name",
+            "type": "string"
+          },
+          "timestamp": {
+            "description": "When the event happened; must include a timezone (stored as UTC)",
+            "format": "date-time",
+            "title": "Timestamp",
+            "type": "string"
+          },
+          "trace_id": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "pattern": "^[A-Za-z0-9-]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Trace Id"
+          }
+        },
+        "required": [
+          "event_id",
+          "timestamp",
+          "level",
+          "service_name",
+          "message"
+        ],
+        "title": "LogEventIn",
         "type": "object"
       },
       "LoginRequest": {
@@ -475,6 +901,213 @@
         "title": "Problem",
         "type": "object"
       },
+      "ProjectCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "environment": {
+            "default": "production",
+            "maxLength": 32,
+            "minLength": 1,
+            "pattern": "^[a-z0-9][a-z0-9_-]{0,31}$",
+            "title": "Environment",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "retention_days": {
+            "default": 7,
+            "maximum": 30.0,
+            "minimum": 1.0,
+            "title": "Retention Days",
+            "type": "integer"
+          },
+          "slug": {
+            "anyOf": [
+              {
+                "maxLength": 48,
+                "minLength": 3,
+                "pattern": "^[a-z0-9][a-z0-9-]{1,46}[a-z0-9]$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Unique within the organization; derived from the name when omitted.",
+            "title": "Slug"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "ProjectCreate",
+        "type": "object"
+      },
+      "ProjectListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ProjectOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Opaque cursor for the next page; null when this is the last page",
+            "title": "Next Cursor"
+          }
+        },
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "title": "ProjectListResponse",
+        "type": "object"
+      },
+      "ProjectOut": {
+        "properties": {
+          "archived_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archived At"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "environment": {
+            "title": "Environment",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "org_id": {
+            "format": "uuid",
+            "title": "Org Id",
+            "type": "string"
+          },
+          "retention_days": {
+            "title": "Retention Days",
+            "type": "integer"
+          },
+          "role": {
+            "$ref": "#/components/schemas/Role",
+            "description": "The caller's role (inherited from the organization)"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "org_id",
+          "name",
+          "slug",
+          "environment",
+          "retention_days",
+          "archived_at",
+          "created_at",
+          "updated_at",
+          "role"
+        ],
+        "title": "ProjectOut",
+        "type": "object"
+      },
+      "ProjectUpdate": {
+        "additionalProperties": false,
+        "description": "Partial update. `org_id`, `archived_at` etc. are not accepted (extra=forbid).",
+        "properties": {
+          "environment": {
+            "anyOf": [
+              {
+                "maxLength": 32,
+                "minLength": 1,
+                "pattern": "^[a-z0-9][a-z0-9_-]{0,31}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Environment"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "retention_days": {
+            "anyOf": [
+              {
+                "maximum": 30.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retention Days"
+          },
+          "slug": {
+            "anyOf": [
+              {
+                "maxLength": 48,
+                "minLength": 3,
+                "pattern": "^[a-z0-9][a-z0-9-]{1,46}[a-z0-9]$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Slug"
+          }
+        },
+        "title": "ProjectUpdate",
+        "type": "object"
+      },
       "ReadinessChecks": {
         "additionalProperties": false,
         "properties": {
@@ -725,6 +1358,13 @@
         "title": "ValidationError",
         "type": "object"
       }
+    },
+    "securitySchemes": {
+      "IngestionKey": {
+        "description": "Project ingestion key: `Authorization: Bearer tp_<id>_<secret>`",
+        "scheme": "bearer",
+        "type": "http"
+      }
     }
   },
   "info": {
@@ -787,7 +1427,7 @@
               },
               "application/problem+json": {}
             },
-            "description": "Not authenticated"
+            "description": "Not authenticated (or invalid ingestion key)"
           },
           "403": {
             "content": {
@@ -887,7 +1527,7 @@
               },
               "application/problem+json": {}
             },
-            "description": "Not authenticated"
+            "description": "Not authenticated (or invalid ingestion key)"
           },
           "403": {
             "content": {
@@ -930,7 +1570,7 @@
               },
               "application/problem+json": {}
             },
-            "description": "Not authenticated"
+            "description": "Not authenticated (or invalid ingestion key)"
           }
         },
         "summary": "Current user",
@@ -1037,7 +1677,7 @@
               },
               "application/problem+json": {}
             },
-            "description": "Not authenticated"
+            "description": "Not authenticated (or invalid ingestion key)"
           }
         },
         "summary": "List my active sessions",
@@ -1074,7 +1714,7 @@
               },
               "application/problem+json": {}
             },
-            "description": "Not authenticated"
+            "description": "Not authenticated (or invalid ingestion key)"
           },
           "403": {
             "content": {
@@ -1168,6 +1808,108 @@
         ]
       }
     },
+    "/api/v1/ingest/logs": {
+      "post": {
+        "operationId": "ingest_logs_api_v1_ingest_logs_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IngestBatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IngestResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Not authenticated (or invalid ingestion key)"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Request body too large"
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Unsupported media type or content encoding"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Validation failed"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Rate limited (see Retry-After)"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Dependency unavailable"
+          }
+        },
+        "security": [
+          {
+            "IngestionKey": []
+          }
+        ],
+        "summary": "Ingest a batch of log events (ingestion key auth; idempotent per event_id)",
+        "tags": [
+          "ingest"
+        ]
+      }
+    },
     "/api/v1/organizations": {
       "get": {
         "operationId": "list_organizations_api_v1_organizations_get",
@@ -1191,7 +1933,7 @@
               },
               "application/problem+json": {}
             },
-            "description": "Not authenticated"
+            "description": "Not authenticated (or invalid ingestion key)"
           }
         },
         "summary": "List my organizations",
@@ -1231,7 +1973,7 @@
               },
               "application/problem+json": {}
             },
-            "description": "Not authenticated"
+            "description": "Not authenticated (or invalid ingestion key)"
           },
           "403": {
             "content": {
@@ -1297,7 +2039,7 @@
               },
               "application/problem+json": {}
             },
-            "description": "Not authenticated"
+            "description": "Not authenticated (or invalid ingestion key)"
           },
           "404": {
             "content": {
@@ -1374,7 +2116,7 @@
               },
               "application/problem+json": {}
             },
-            "description": "Not authenticated"
+            "description": "Not authenticated (or invalid ingestion key)"
           },
           "403": {
             "content": {
@@ -1450,7 +2192,7 @@
               },
               "application/problem+json": {}
             },
-            "description": "Not authenticated"
+            "description": "Not authenticated (or invalid ingestion key)"
           },
           "404": {
             "content": {
@@ -1523,7 +2265,7 @@
               },
               "application/problem+json": {}
             },
-            "description": "Not authenticated"
+            "description": "Not authenticated (or invalid ingestion key)"
           },
           "403": {
             "content": {
@@ -1614,7 +2356,7 @@
               },
               "application/problem+json": {}
             },
-            "description": "Not authenticated"
+            "description": "Not authenticated (or invalid ingestion key)"
           },
           "403": {
             "content": {
@@ -1719,7 +2461,7 @@
               },
               "application/problem+json": {}
             },
-            "description": "Not authenticated"
+            "description": "Not authenticated (or invalid ingestion key)"
           },
           "403": {
             "content": {
@@ -1769,6 +2511,926 @@
         "summary": "Change a member's role",
         "tags": [
           "organizations"
+        ]
+      }
+    },
+    "/api/v1/organizations/{org_id}/projects": {
+      "get": {
+        "operationId": "list_projects_api_v1_organizations__org_id__projects_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Org Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "include_archived",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Archived",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Not authenticated (or invalid ingestion key)"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Not found (or not visible to the caller)"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Validation failed"
+          }
+        },
+        "summary": "List projects in an organization (newest first, keyset pagination)",
+        "tags": [
+          "projects"
+        ]
+      },
+      "post": {
+        "operationId": "create_project_api_v1_organizations__org_id__projects_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "org_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Org Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Not authenticated (or invalid ingestion key)"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Forbidden (CSRF failure or insufficient role)"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Not found (or not visible to the caller)"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Validation failed"
+          }
+        },
+        "summary": "Create a project (owner/admin)",
+        "tags": [
+          "projects"
+        ]
+      }
+    },
+    "/api/v1/projects/{project_id}": {
+      "get": {
+        "operationId": "get_project_api_v1_projects__project_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Not authenticated (or invalid ingestion key)"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Not found (or not visible to the caller)"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Validation failed"
+          }
+        },
+        "summary": "Get a project (any member of its organization)",
+        "tags": [
+          "projects"
+        ]
+      },
+      "patch": {
+        "operationId": "update_project_api_v1_projects__project_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Not authenticated (or invalid ingestion key)"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Forbidden (CSRF failure or insufficient role)"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Not found (or not visible to the caller)"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Validation failed"
+          }
+        },
+        "summary": "Update a project (owner/admin; archived projects are read-only)",
+        "tags": [
+          "projects"
+        ]
+      }
+    },
+    "/api/v1/projects/{project_id}/archive": {
+      "post": {
+        "operationId": "archive_project_api_v1_projects__project_id__archive_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Not authenticated (or invalid ingestion key)"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Forbidden (CSRF failure or insufficient role)"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Not found (or not visible to the caller)"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Validation failed"
+          }
+        },
+        "summary": "Archive a project (owner/admin): hidden from default lists, ingestion rejected",
+        "tags": [
+          "projects"
+        ]
+      }
+    },
+    "/api/v1/projects/{project_id}/ingestion-keys": {
+      "get": {
+        "operationId": "list_keys_api_v1_projects__project_id__ingestion_keys_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "include_revoked",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Revoked",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IngestionKeyListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Not authenticated (or invalid ingestion key)"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Not found (or not visible to the caller)"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Validation failed"
+          }
+        },
+        "summary": "List ingestion keys (metadata only; member+)",
+        "tags": [
+          "ingestion-keys"
+        ]
+      },
+      "post": {
+        "operationId": "create_key_api_v1_projects__project_id__ingestion_keys_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IngestionKeyCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IngestionKeyCreated"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Not authenticated (or invalid ingestion key)"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Forbidden (CSRF failure or insufficient role)"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Not found (or not visible to the caller)"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Validation failed"
+          }
+        },
+        "summary": "Create an ingestion key (owner/admin). The secret is returned only here.",
+        "tags": [
+          "ingestion-keys"
+        ]
+      }
+    },
+    "/api/v1/projects/{project_id}/ingestion-keys/{key_id}/revoke": {
+      "post": {
+        "operationId": "revoke_key_api_v1_projects__project_id__ingestion_keys__key_id__revoke_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Key Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IngestionKeyOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Not authenticated (or invalid ingestion key)"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Forbidden (CSRF failure or insufficient role)"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Not found (or not visible to the caller)"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Validation failed"
+          }
+        },
+        "summary": "Revoke an ingestion key immediately (owner/admin; idempotent)",
+        "tags": [
+          "ingestion-keys"
+        ]
+      }
+    },
+    "/api/v1/projects/{project_id}/ingestion-keys/{key_id}/rotate": {
+      "post": {
+        "operationId": "rotate_key_api_v1_projects__project_id__ingestion_keys__key_id__rotate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Key Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/IngestionKeyRotate"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IngestionKeyRotated"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Not authenticated (or invalid ingestion key)"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Forbidden (CSRF failure or insufficient role)"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Not found (or not visible to the caller)"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Validation failed"
+          }
+        },
+        "summary": "Rotate: issue a replacement key; the old one is revoked now or after a grace period",
+        "tags": [
+          "ingestion-keys"
+        ]
+      }
+    },
+    "/api/v1/projects/{project_id}/restore": {
+      "post": {
+        "operationId": "restore_project_api_v1_projects__project_id__restore_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Not authenticated (or invalid ingestion key)"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Forbidden (CSRF failure or insufficient role)"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Not found (or not visible to the caller)"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              },
+              "application/problem+json": {}
+            },
+            "description": "Validation failed"
+          }
+        },
+        "summary": "Restore an archived project (owner/admin)",
+        "tags": [
+          "projects"
         ]
       }
     }

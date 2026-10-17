@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import itertools
+import json
+import uuid
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from fastapi import FastAPI
@@ -98,3 +101,57 @@ class ApiUser:
 
     def me_id(self) -> str:
         return str(self.get("/auth/me").json()["user"]["id"])
+
+    # --- Phase 3 ----------------------------------------------------------------------------
+    def create_project(self, org_id: str, name: str = "Checkout", **extra: Any) -> dict[str, Any]:
+        response = self.post(f"/organizations/{org_id}/projects", {"name": name, **extra})
+        assert response.status_code == 201, response.text
+        data: dict[str, Any] = response.json()
+        return data
+
+    def create_key(self, project_id: str, name: str = "ci") -> dict[str, Any]:
+        response = self.post(f"/projects/{project_id}/ingestion-keys", {"name": name})
+        assert response.status_code == 201, response.text
+        data: dict[str, Any] = response.json()
+        return data
+
+
+def ingest(
+    app: FastAPI,
+    key: str | None,
+    body: Any = None,
+    *,
+    raw: bytes | None = None,
+    headers: dict[str, str] | None = None,
+    cookies: dict[str, str] | None = None,
+) -> Response:
+    """POST /ingest/logs from a fresh client (no cookie jar), like an SDK would."""
+    client = TestClient(app, base_url="http://localhost", raise_server_exceptions=False)
+    if cookies:
+        for name, value in cookies.items():
+            client.cookies.set(name, value)
+    sent_headers = {"Content-Type": "application/json", **(headers or {})}
+    if key is not None:
+        sent_headers["Authorization"] = f"Bearer {key}"
+    content = raw if raw is not None else json.dumps(body).encode()
+    response: Response = client.post(f"{API}/ingest/logs", content=content, headers=sent_headers)
+    return response
+
+
+def make_event(index: int = 0, **overrides: Any) -> dict[str, Any]:
+    event: dict[str, Any] = {
+        "event_id": str(uuid.uuid4()),
+        "timestamp": (datetime.now(UTC) - timedelta(seconds=index)).isoformat(),
+        "level": "info",
+        "service_name": "checkout",
+        "message": f"GET /api/cart -> 200 ({index})",
+        "trace_id": uuid.uuid4().hex,
+        "request_id": f"req-{index}",
+        "duration_ms": 12.5,
+        "http_method": "GET",
+        "http_path": "/api/cart",
+        "http_status": 200,
+        "attributes": {"region": "local", "synthetic": True},
+    }
+    event.update(overrides)
+    return event

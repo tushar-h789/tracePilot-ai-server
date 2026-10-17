@@ -71,4 +71,40 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     install_exception_handlers(app, settings)
 
     app.include_router(api_router, prefix=API_PREFIX)
+    install_openapi_extras(app)
     return app
+
+
+def install_openapi_extras(app: FastAPI) -> None:
+    """Add what FastAPI cannot infer: the raw-body ingest schema and the key security scheme.
+
+    The ingest route reads the body itself (size cap before parsing), so `IngestBatch` is
+    registered here to keep it in the published contract and the generated client types.
+    """
+    from typing import Any
+
+    from fastapi.openapi.utils import get_openapi
+
+    from app.schemas.ingest import IngestBatch
+
+    def custom_openapi() -> dict[str, Any]:
+        if app.openapi_schema:
+            return app.openapi_schema
+        schema = get_openapi(title=app.title, version=app.version, routes=app.routes)
+        components = schema.setdefault("components", {})
+        schemas = components.setdefault("schemas", {})
+        batch = IngestBatch.model_json_schema(ref_template="#/components/schemas/{model}")
+        for name, definition in batch.pop("$defs", {}).items():
+            schemas.setdefault(name, definition)
+        schemas["IngestBatch"] = batch
+        components["securitySchemes"] = {
+            "IngestionKey": {
+                "type": "http",
+                "scheme": "bearer",
+                "description": "Project ingestion key: `Authorization: Bearer tp_<id>_<secret>`",
+            }
+        }
+        app.openapi_schema = schema
+        return schema
+
+    app.openapi = custom_openapi  # type: ignore[method-assign]

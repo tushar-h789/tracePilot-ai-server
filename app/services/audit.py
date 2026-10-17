@@ -36,6 +36,13 @@ class AuditAction(StrEnum):
     MEMBER_ROLE_CHANGED = "org.member_role_changed"
     MEMBER_REMOVED = "org.member_removed"
     PERMISSION_DENIED = "authz.permission_denied"
+    PROJECT_CREATED = "project.created"
+    PROJECT_UPDATED = "project.updated"
+    PROJECT_ARCHIVED = "project.archived"
+    PROJECT_RESTORED = "project.restored"
+    INGESTION_KEY_CREATED = "ingestion_key.created"
+    INGESTION_KEY_REVOKED = "ingestion_key.revoked"
+    INGESTION_KEY_ROTATED = "ingestion_key.rotated"
 
 
 class AuditService:

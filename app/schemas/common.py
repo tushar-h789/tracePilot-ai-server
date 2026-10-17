@@ -37,10 +37,12 @@ class MessageResponse(BaseModel):
 
 def problem_responses(*codes: int) -> dict[int | str, dict[str, Any]]:
     descriptions = {
-        401: "Not authenticated",
+        401: "Not authenticated (or invalid ingestion key)",
         403: "Forbidden (CSRF failure or insufficient role)",
         404: "Not found (or not visible to the caller)",
         409: "Conflict",
+        413: "Request body too large",
+        415: "Unsupported media type or content encoding",
         422: "Validation failed",
         429: "Rate limited (see Retry-After)",
         503: "Dependency unavailable",

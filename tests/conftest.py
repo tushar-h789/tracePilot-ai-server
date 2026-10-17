@@ -22,6 +22,7 @@ os.environ.setdefault(
 )
 os.environ.setdefault("REDIS_URL", "redis://127.0.0.1:1/0")
 os.environ.setdefault("SECRET_KEY", "unit-test-secret-key-not-used-anywhere-else-0123456789")
+os.environ.setdefault("INGEST_KEY_PEPPER", "unit-test-ingest-pepper-not-used-anywhere-else-012345")
 
 from app.core.config import Settings
 from app.main import create_app
@@ -29,6 +30,7 @@ from app.main import create_app
 UNREACHABLE_DB = "postgresql+psycopg://tracepilot:unit-test@127.0.0.1:1/tracepilot_test"
 UNREACHABLE_REDIS = "redis://127.0.0.1:1/0"
 TEST_SECRET_KEY = "unit-test-secret-key-not-used-anywhere-else-0123456789"
+TEST_INGEST_PEPPER = "unit-test-ingest-pepper-not-used-anywhere-else-012345"
 
 SettingsFactory = Callable[..., Settings]
 
@@ -44,6 +46,7 @@ def make_settings() -> SettingsFactory:
             "health_check_timeout_seconds": 0.5,
             "db_connect_timeout_seconds": 1,
             "secret_key": TEST_SECRET_KEY,
+            "ingest_key_pepper": TEST_INGEST_PEPPER,
             # Cheap Argon2id parameters keep the suite fast; production defaults are tested
             # separately in test_passwords.py.
             "argon2_time_cost": 1,
@@ -103,7 +106,10 @@ def integration_client(
 # --- Phase 2: identity / org integration fixtures ------------------------------------------
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-_TABLES = "audit_logs, organization_members, sessions, organizations, users"
+_TABLES = (
+    "log_events, ingestion_keys, projects, audit_logs, organization_members, sessions, "
+    "organizations, users"
+)
 
 
 @pytest.fixture(scope="session")

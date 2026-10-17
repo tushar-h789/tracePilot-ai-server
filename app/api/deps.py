@@ -20,17 +20,28 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings
 from app.core.csrf import HEADER_NAME, SAFE_METHODS, verify_csrf
-from app.core.errors import CsrfError, NotFoundError, OriginNotAllowedError, PermissionDeniedError
+from app.core.errors import (
+    CsrfError,
+    NotFoundError,
+    OriginNotAllowedError,
+    PayloadTooLargeError,
+    PermissionDeniedError,
+    UnsupportedMediaTypeError,
+)
 from app.core.net import ClientInfo, client_info
 from app.core.passwords import PasswordService
 from app.core.permissions import SENSITIVE_PERMISSIONS, Permission, Role, role_has
 from app.core.rate_limit import FixedWindowRateLimiter
 from app.db.session import get_db
 from app.repositories.organizations import OrganizationRepository
+from app.repositories.projects import ProjectRepository
 from app.services.audit import AuditAction, AuditService
 from app.services.auth import AuthContext, AuthService
 from app.services.health import HealthService
+from app.services.ingest import IngestContext, IngestService
+from app.services.ingestion_keys import IngestionKeyService
 from app.services.organizations import OrganizationService, OrgScope
+from app.services.projects import ProjectScope, ProjectService
 
 
 def get_app_settings(request: Request) -> Settings:
@@ -116,6 +127,9 @@ def authorize_org(
     auth: AuthContext,
     org_id: uuid.UUID,
     permission: Permission,
+    not_found_message: str = "Organization not found.",
+    target_type: str = "organization",
+    target_id: uuid.UUID | None = None,
 ) -> OrgScope:
     """Resolve the caller's membership in `org_id` and check `permission`.
 
@@ -126,7 +140,7 @@ def authorize_org(
     """
     membership = OrganizationRepository(db).get_membership(org_id, auth.user.id)
     if membership is None:
-        raise NotFoundError("Organization not found.")
+        raise NotFoundError(not_found_message)
     role = Role(membership.role)
     if not role_has(role, permission):
         if permission in SENSITIVE_PERMISSIONS:
@@ -134,8 +148,8 @@ def authorize_org(
                 AuditAction.PERMISSION_DENIED,
                 actor_user_id=auth.user.id,
                 org_id=org_id,
-                target_type="organization",
-                target_id=org_id,
+                target_type=target_type,
+                target_id=target_id or org_id,
                 ip_address=client.ip,
                 details={"permission": permission.value, "role": role.value},
             )
@@ -159,3 +173,125 @@ def require_org_permission(permission: Permission) -> Callable[..., OrgScope]:
 
     dependency.__name__ = f"require_{permission.name.lower()}"
     return dependency
+
+
+# --- Phase 3: projects, ingestion keys, ingestion -------------------------------------------
+
+
+def get_project_service(db: DbSession, audit: AuditDep) -> ProjectService:
+    return ProjectService(db, audit)
+
+
+ProjectServiceDep = Annotated[ProjectService, Depends(get_project_service)]
+
+
+def get_ingestion_key_service(
+    db: DbSession, audit: AuditDep, settings: SettingsDep
+) -> IngestionKeyService:
+    return IngestionKeyService(db, audit, settings)
+
+
+IngestionKeyServiceDep = Annotated[IngestionKeyService, Depends(get_ingestion_key_service)]
+
+PROJECT_NOT_FOUND = "Project not found."
+
+
+def authorize_project(
+    *,
+    db: Session,
+    audit: AuditService,
+    client: ClientInfo,
+    auth: AuthContext,
+    project_id: uuid.UUID,
+    permission: Permission,
+) -> ProjectScope:
+    """Load the project, then authorize against its organization (role is inherited).
+
+    A project in an organization the caller does not belong to is a 404, identical to an
+    unknown id. Archived projects are still visible to members (read-only).
+    """
+    project = ProjectRepository(db).get(project_id)
+    if project is None:
+        raise NotFoundError(PROJECT_NOT_FOUND)
+    org_scope = authorize_org(
+        db=db,
+        audit=audit,
+        client=client,
+        auth=auth,
+        org_id=project.org_id,
+        permission=permission,
+        not_found_message=PROJECT_NOT_FOUND,
+        target_type="project",
+        target_id=project.id,
+    )
+    return ProjectScope(
+        org_id=project.org_id,
+        project_id=project.id,
+        user_id=auth.user.id,
+        role=org_scope.role,
+        project=project,
+    )
+
+
+def require_project_permission(permission: Permission) -> Callable[..., ProjectScope]:
+    """Dependency factory for project-scoped routes (see `require_org_permission`)."""
+
+    def dependency(
+        project_id: Annotated[uuid.UUID, Path()],
+        auth: CurrentAuth,
+        db: DbSession,
+        audit: AuditDep,
+        client: ClientDep,
+    ) -> ProjectScope:
+        return authorize_project(
+            db=db,
+            audit=audit,
+            client=client,
+            auth=auth,
+            project_id=project_id,
+            permission=permission,
+        )
+
+    dependency.__name__ = f"require_project_{permission.name.lower()}"
+    return dependency
+
+
+def get_ingest_service(request: Request, db: DbSession, settings: SettingsDep) -> IngestService:
+    return IngestService(db, settings, FixedWindowRateLimiter(request.app.state.redis))
+
+
+IngestServiceDep = Annotated[IngestService, Depends(get_ingest_service)]
+
+
+def get_ingest_context(request: Request, service: IngestServiceDep) -> IngestContext:
+    """Ingestion auth: only the Authorization header counts; cookies are never consulted."""
+    return service.authenticate(request.headers.get("authorization"))
+
+
+IngestContextDep = Annotated[IngestContext, Depends(get_ingest_context)]
+
+
+async def read_ingest_body(request: Request, settings: SettingsDep) -> bytes:
+    """Read the raw body with a hard size cap *before* any JSON parsing (413 when exceeded)."""
+    media_type = request.headers.get("content-type", "").split(";", 1)[0].strip().lower()
+    if media_type != "application/json":
+        raise UnsupportedMediaTypeError("Content-Type must be application/json.")
+    encoding = request.headers.get("content-encoding", "identity").strip().lower()
+    if encoding not in ("", "identity"):
+        raise UnsupportedMediaTypeError("Compressed request bodies are not supported.")
+    limit = settings.ingest_max_body_bytes
+    too_large = f"Request body must be at most {limit} bytes."
+    declared = request.headers.get("content-length")
+    if declared is not None and declared.isdigit() and int(declared) > limit:
+        raise PayloadTooLargeError(too_large)
+    size = 0
+    chunks: list[bytes] = []
+    async for chunk in request.stream():
+        size += len(chunk)
+        if size > limit:
+            raise PayloadTooLargeError(too_large)
+        chunks.append(chunk)
+    return b"".join(chunks)
+
+
+IngestBodyDep = Annotated[bytes, Depends(read_ingest_body)]
